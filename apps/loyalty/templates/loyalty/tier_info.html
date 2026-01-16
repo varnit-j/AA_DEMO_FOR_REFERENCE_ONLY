@@ -1,0 +1,80 @@
+{% extends 'flight/layout.html' %}
+
+{% block title %}Tier Information{% endblock %}
+
+{% block body %}
+<div class="container mt-4">
+    <h2 class="mb-4">Loyalty Tier Information</h2>
+    
+    <div class="mb-3">
+        <a href="{% url 'loyalty:dashboard' %}" class="btn btn-secondary">← Back to Dashboard</a>
+    </div>
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% else %}
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Your Current Status</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <strong>Current Tier:</strong><br>
+                                <span class="badge badge-success">{{ account.current_tier.display_name|default:"No Tier" }}</span>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Total Points Earned:</strong><br>
+                                {{ account.total_points_earned|default:0 }}
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Current Balance:</strong><br>
+                                {{ account.current_points_balance|default:0 }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>All Available Tiers</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if tiers %}
+                            <div class="row">
+                                {% for tier in tiers %}
+                                <div class="col-md-6 col-lg-3 mb-3">
+                                    <div class="card {% if account.current_tier == tier %}border-success{% endif %}">
+                                        <div class="card-body text-center">
+                                            <h5 class="card-title">{{ tier.display_name }}</h5>
+                                            <p><strong>Required Points:</strong><br>{{ tier.min_points_required }}</p>
+                                            <p><strong>Points Multiplier:</strong><br>{{ tier.points_multiplier }}x</p>
+                                            <p><strong>Redemption Bonus:</strong><br>{{ tier.redemption_bonus }}x</p>
+                                            {% if account.current_tier == tier %}
+                                                <span class="badge badge-success">Current Tier</span>
+                                            {% elif account.total_points_earned >= tier.min_points_required %}
+                                                <span class="badge badge-info">Qualified</span>
+                                            {% else %}
+                                                <span class="badge badge-secondary">Locked</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <p>No tier information available.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

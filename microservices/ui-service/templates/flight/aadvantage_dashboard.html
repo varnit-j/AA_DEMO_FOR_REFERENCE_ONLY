@@ -1,0 +1,291 @@
+
+{% extends 'flight/layout.html' %}
+{% load static %}
+
+{% block head %}
+<title>AAdvantage Dashboard | Flight</title>
+<style>
+.aadvantage-header {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    color: white;
+    padding: 2rem 0;
+    margin-bottom: 2rem;
+}
+
+.tier-badge {
+    background: #ffd700;
+    color: #1e3c72;
+    padding: 0.5rem 1rem;
+    border-radius: 25px;
+    font-weight: bold;
+    display: inline-block;
+    margin-bottom: 1rem;
+}
+
+.miles-card {
+    background: white;
+    border-radius: 10px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 1rem;
+}
+
+.benefits-list {
+    list-style: none;
+    padding: 0;
+}
+
+.benefits-list li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #eee;
+}
+
+.benefits-list li:before {
+    content: "✓";
+    color: #28a745;
+    font-weight: bold;
+    margin-right: 0.5rem;
+}
+
+.progress-bar {
+    background: #e9ecef;
+    border-radius: 10px;
+    height: 20px;
+    overflow: hidden;
+    margin: 1rem 0;
+}
+
+.progress-fill {
+    background: linear-gradient(90deg, #28a745, #20c997);
+    height: 100%;
+    transition: width 0.3s ease;
+}
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="aadvantage-header">
+    <div class="container">
+        <h1>AAdvantage Dashboard</h1>
+        <div class="tier-badge" id="current-tier-badge">Gold Member</div>
+        <p>Welcome to your loyalty program dashboard</p>
+    </div>
+</div>
+
+<div class="container">
+    <div class="row">
+        <div class="col-md-6">
+            <div class="miles-card">
+                <h3>Miles Balance</h3>
+                <h2 style="color: #1e3c72;">{{ loyalty_data.points_balance|default:"120" }} Miles</h2>
+                <p class="text-muted">Available for redemption</p>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="miles-card">
+                <h3>Tier Progress</h3>
+                <p id="tier-info">25,000 miles to Platinum</p>
+                <div class="progress-bar" style="position: relative; height: 30px;">
+                    <div class="progress-fill" id="progress-fill" style="width: 100%;"></div>
+                    <!-- Tier markers within the progress bar -->
+                    <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 5px; font-size: 0.8rem; font-weight: bold; color: white; text-shadow: 1px 1px 1px rgba(0,0,0,0.5);">
+                        <span id="tier-R">R</span>
+                        <span id="tier-C">C</span>
+                        <span id="tier-G">G</span>
+                        <span id="tier-P">P</span>
+                        <span id="tier-T">T</span>
+                        <span id="tier-E">E</span>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between mt-2">
+                    <small class="text-muted" id="current-tier-label">Gold: 25,000</small>
+                    <small class="text-muted" id="next-tier-label">Platinum: 50,000</small>
+                </div>
+                <div class="text-center mt-1">
+                    <small class="text-muted" id="progress-details">Current: 25,000 miles (100% to Gold)</small>
+                </div>
+                
+                <!-- Legend below the progress bar -->
+                <div class="mt-2" style="font-size: 0.7rem; color: #6c757d;">
+                    <div class="d-flex justify-content-between">
+                        <span>R: Regular (0)</span>
+                        <span>C: ConciergeKey (25K)</span>
+                        <span>G: Gold (50K)</span>
+                        <span>P: Platinum (75K)</span>
+                        <span>T: Plat Pro (100K)</span>
+                        <span>E: Exec Plat (125K)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-md-8">
+            <div class="miles-card">
+                <h3>Your Benefits</h3>
+                <ul class="benefits-list">
+                    {% for benefit in loyalty_data.benefits %}
+                    <li>{{ benefit }}</li>
+                    {% empty %}
+                    <li>Priority boarding</li>
+                    <li>Free checked bags</li>
+                    <li>Lounge access</li>
+                    <li>Upgrade eligibility</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="miles-card">
+                <h3>Quick Actions</h3>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary">Redeem Miles</button>
+                    <button class="btn btn-outline-primary">Transfer Miles</button>
+                    <button class="btn btn-outline-secondary">View History</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="miles-card">
+                <h3>Transaction History</h3>
+                {% if transaction_history %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Transaction</th>
+                                    <th>Amount</th>
+                                    <th>Miles Change</th>
+                                    <th>Type</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in transaction_history %}
+                                <tr>
+                                    <td>{{ transaction.date }}</td>
+                                    <td>{{ transaction.transaction_id }}</td>
+                                    <td>
+                                        {% if transaction.amount %}
+                                            ${{ transaction.amount|floatformat:2 }}
+                                        {% elif transaction.points_value %}
+                                            ${{ transaction.points_value|floatformat:2 }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if transaction.points_earned %}
+                                            <span class="text-success">+{{ transaction.points_earned }} miles</span>
+                                        {% elif transaction.points_redeemed %}
+                                            <span class="text-danger">-{{ transaction.points_redeemed }} miles</span>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if transaction.type == 'flight_booking' %}
+                                            <span class="badge badge-success">{{ transaction.type|title }}</span>
+                                        {% elif transaction.type == 'miles_redemption' %}
+                                            <span class="badge badge-warning">{{ transaction.type|title }}</span>
+                                        {% else %}
+                                            <span class="badge badge-primary">{{ transaction.type|title }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted">No transaction history available yet. Complete a flight booking to start earning miles!</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="miles-card">
+                <h3>Service Status</h3>
+                <p><strong>Status:</strong> <span class="badge badge-success">{{ loyalty_data.status|title }}</span></p>
+                <p><strong>Service:</strong> {{ loyalty_data.service|default:"AAdvantage Loyalty Program" }}</p>
+                <p><strong>Message:</strong> {{ loyalty_data.message|default:"Welcome to your loyalty dashboard!" }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Tier system with 25,000 mile increments
+    const tiers = [
+        { name: "Regular", threshold: 0, badge: "success" },
+        { name: "Gold", threshold: 25000, badge: "primary" },
+        { name: "Platinum", threshold: 50000, badge: "info" },
+        { name: "Platinum Pro", threshold: 75000, badge: "warning" },
+        { name: "Executive Platinum", threshold: 100000, badge: "danger" },
+        { name: "ConciergeKey", threshold: 125000, badge: "dark" }
+    ];
+    
+    // Get current miles from the template
+    const currentMiles = parseInt('{{ loyalty_data.points_balance|default:"120" }}') || 120;
+    
+    // Find current tier and next tier
+    let currentTierIndex = 0;
+    for (let i = 0; i < tiers.length; i++) {
+        if (currentMiles >= tiers[i].threshold) {
+            currentTierIndex = i;
+        }
+    }
+    
+    const currentTier = tiers[currentTierIndex];
+    const nextTier = tiers[currentTierIndex + 1];
+    
+    // Calculate progress
+    if (nextTier) {
+        const progressInTier = currentMiles - currentTier.threshold;
+        const tierRange = nextTier.threshold - currentTier.threshold;
+        const progressPercent = (progressInTier / tierRange) * 100;
+        const milesToNext = nextTier.threshold - currentMiles;
+        
+        // Update UI
+        document.getElementById('tier-info').textContent = `${milesToNext.toLocaleString()} miles to ${nextTier.name}`;
+        document.getElementById('progress-fill').style.width = progressPercent + '%';
+        document.getElementById('current-tier-label').textContent = `${currentTier.name}: ${currentTier.threshold.toLocaleString()}`;
+        document.getElementById('next-tier-label').textContent = `${nextTier.name}: ${nextTier.threshold.toLocaleString()}`;
+        document.getElementById('progress-details').textContent = `Current: ${currentMiles.toLocaleString()} miles (${Math.round(progressPercent)}% to ${nextTier.name})`;
+        document.getElementById('current-tier-badge').textContent = `${currentTier.name} Member`;
+    } else {
+        // At maximum tier
+        document.getElementById('tier-info').textContent = `You've reached the highest tier!`;
+        document.getElementById('progress-fill').style.width = '100%';
+        document.getElementById('current-tier-label').textContent = `${currentTier.name}: ${currentTier.threshold.toLocaleString()}`;
+        document.getElementById('next-tier-label').textContent = `Maximum Tier Achieved`;
+        document.getElementById('progress-details').textContent = `Current: ${currentMiles.toLocaleString()} miles (Maximum tier)`;
+        document.getElementById('current-tier-badge').textContent = `${currentTier.name} Member`;
+    }
+    
+    // Update tier markers within the progress bar to show current position
+    const tierMarkers = ['tier-R', 'tier-C', 'tier-G', 'tier-P', 'tier-T', 'tier-E'];
+    tierMarkers.forEach((markerId, index) => {
+        const marker = document.getElementById(markerId);
+        if (marker) {
+            if (index <= currentTierIndex) {
+                marker.style.color = '#ffd700'; // Gold color for achieved tiers
+                marker.style.fontWeight = 'bold';
+            } else {
+                marker.style.color = 'rgba(255,255,255,0.6)'; // Semi-transparent for future tiers
+                marker.style.fontWeight = 'normal';
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

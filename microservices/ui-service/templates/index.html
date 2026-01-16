@@ -1,0 +1,130 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Booking - Microservices</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .services {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .service-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        .service-card h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status.running {
+            background: #d4edda;
+            color: #155724;
+        }
+        .nav-links {
+            text-align: center;
+            margin-top: 30px;
+        }
+        .nav-links a {
+            display: inline-block;
+            margin: 0 10px;
+            padding: 10px 20px;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        .nav-links a:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛫 Flight Booking System</h1>
+            <h2>Microservices Architecture</h2>
+            <p>Welcome to the distributed flight booking application</p>
+        </div>
+
+        <div class="services">
+            <div class="service-card">
+                <h3>🔧 Backend Service</h3>
+                <p><strong>Port:</strong> 8001</p>
+                <p><strong>Status:</strong> <span class="status running">Running</span></p>
+                <p>Core flight operations, user management, and booking logic</p>
+            </div>
+
+            <div class="service-card">
+                <h3>💳 Payment Service</h3>
+                <p><strong>Port:</strong> 8002</p>
+                <p><strong>Status:</strong> <span class="status running">Running</span></p>
+                <p>Payment processing, Stripe integration, and transactions</p>
+            </div>
+
+            <div class="service-card">
+                <h3>🎁 Loyalty Service</h3>
+                <p><strong>Port:</strong> 8003</p>
+                <p><strong>Status:</strong> <span class="status running">Running</span></p>
+                <p>Loyalty program, points management, and rewards</p>
+            </div>
+
+            <div class="service-card">
+                <h3>🌐 UI Service</h3>
+                <p><strong>Port:</strong> 8000</p>
+                <p><strong>Status:</strong> <span class="status running">Running</span></p>
+                <p>Frontend interface and API gateway for all services</p>
+            </div>
+        </div>
+
+        <div class="nav-links">
+            <a href="/search/">Search Flights</a>
+            <a href="/book/">Book Flight</a>
+            <a href="/login/">Login</a>
+            <a href="/register/">Register</a>
+            <a href="/about/">About</a>
+            <a href="/contact/">Contact</a>
+        </div>
+
+        <div style="margin-top: 30px; padding: 20px; background: #e9ecef; border-radius: 8px;">
+            <h3>🔗 Service URLs</h3>
+            <ul>
+                <li><strong>Backend API:</strong> <a href="http://localhost:8001/admin/" target="_blank">http://localhost:8001</a></li>
+                <li><strong>Payment API:</strong> <a href="http://localhost:8002/admin/" target="_blank">http://localhost:8002</a></li>
+                <li><strong>Loyalty API:</strong> <a href="http://localhost:8003/admin/" target="_blank">http://localhost:8003</a></li>
+                <li><strong>UI Service:</strong> <a href="http://localhost:8000/" target="_blank">http://localhost:8000</a></li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

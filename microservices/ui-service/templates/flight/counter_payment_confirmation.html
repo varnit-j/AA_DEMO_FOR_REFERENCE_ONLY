@@ -1,0 +1,113 @@
+
+{% extends 'flight/layout.html' %}
+
+{% load static %}
+{% load currency_filters %}
+
+{% block head %}
+    <title>Counter Payment Confirmation | Flight</title>
+    <link rel="stylesheet" href="{% static 'css/payment_style.css' %}">
+{% endblock %}
+
+{% block body %}
+    <section class="section section1">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header bg-warning text-dark">
+                            <h4 class="mb-0">
+                                <i class="fas fa-clock"></i>
+                                Ticket On Hold - Counter Payment Required
+                            </h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-warning">
+                                <h5><i class="fas fa-info-circle"></i> Important Information</h5>
+                                <p>Your ticket has been placed on hold. You must complete payment at the airport counter before your flight departure.</p>
+                            </div>
+
+                            <!-- Flight Details -->
+                            <div class="mb-4">
+                                <h6>Flight Details</h6>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <p><strong>Ticket Reference:</strong> {{ticket1.ref_no}}</p>
+                                        <p><strong>Flight:</strong> {{ticket1.flight.origin.code}} &#8594; {{ticket1.flight.destination.code}}</p>
+                                        <p><strong>Date:</strong> {{ticket1.flight_ddate|date:"D, M d Y"}}</p>
+                                        <p><strong>Passengers:</strong> {{ticket1.passengers.count}}</p>
+                                        <p><strong>Class:</strong> {{ticket1.seat_class|title}}</p>
+                                        <p><strong>Status:</strong> <span class="badge badge-warning">On Hold - Pay at Counter</span></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {% if ticket2 %}
+                            <!-- Return Flight Details -->
+                            <div class="mb-4">
+                                <h6>Return Flight Details</h6>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <p><strong>Ticket Reference:</strong> {{ticket2.ref_no}}</p>
+                                        <p><strong>Flight:</strong> {{ticket2.flight.origin.code}} &#8594; {{ticket2.flight.destination.code}}</p>
+                                        <p><strong>Date:</strong> {{ticket2.flight_ddate|date:"D, M d Y"}}</p>
+                                        <p><strong>Status:</strong> <span class="badge badge-warning">On Hold - Pay at Counter</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Payment Summary -->
+                            <div class="mb-4">
+                                <h6>Payment Summary</h6>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <p><strong>Original Total:</strong> ${{ticket1.total_fare|inr_to_usd|format_usd}}</p>
+                                                {% if points_redeemed > 0 %}
+                                                <p><strong>Miles Redeemed:</strong> {{points_redeemed}} miles</p>
+                                                <p><strong>Miles Value:</strong> ${{points_redeemed|floatformat:0|mul:0.01|floatformat:2}}</p>
+                                                {% endif %}
+                                            </div>
+                                            <div class="col-md-6">
+                                                <p><strong>Amount to Pay at Counter:</strong>
+                                                    <span class="text-danger font-weight-bold">${{remaining_amount|inr_to_usd|format_usd}}</span>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Instructions -->
+                            <div class="mb-4">
+                                <h6>Next Steps</h6>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <ol>
+                                            <li><strong>Arrive at Airport:</strong> Arrive at least 2 hours before domestic flights or 3 hours before international flights</li>
+                                            <li><strong>Visit Counter:</strong> Go to the airline counter with your ticket reference: <strong>{{ticket1.ref_no}}</strong></li>
+                                            <li><strong>Complete Payment:</strong> Pay the remaining amount of <strong>${{remaining_amount|inr_to_usd|format_usd}}</strong></li>
+                                            <li><strong>Get Boarding Pass:</strong> Once payment is complete, you'll receive your boarding pass</li>
+                                        </ol>
+                                        
+                                        <div class="alert alert-info mt-3">
+                                            <strong>Important:</strong> Your loyalty miles have already been redeemed. If you don't complete the counter payment, your ticket will be cancelled and miles will be refunded.
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="text-center">
+                                <a href="{% url 'bookings' %}" class="btn btn-primary mr-2">View My Bookings</a>
+                                <a href="{% url 'index' %}" class="btn btn-secondary">Book Another Flight</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endblock %}

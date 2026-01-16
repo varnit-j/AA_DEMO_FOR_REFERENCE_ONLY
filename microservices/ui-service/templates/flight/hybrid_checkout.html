@@ -1,0 +1,117 @@
+
+{% extends 'flight/layout.html' %}
+
+{% load static %}
+{% load currency_filters %}
+
+{% block head %}
+    <title>Hybrid Checkout | Flight</title>
+    <link rel="stylesheet" href="{% static 'css/payment_style.css' %}">
+    <script src="https://js.stripe.com/v3/"></script>
+{% endblock %}
+
+{% block body %}
+    <section class="section section1">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="payment-box">
+                        <div class="payment-box-head-div">
+                            <div class="payment-box-head">
+                                <h5>Hybrid Payment - Points + Cash</h5>
+                                <div class="display-td">
+                                    <img class="card-img" src="{% static 'img/card.png' %}">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Flight Details -->
+                        <div class="flight-summary mb-4">
+                            <h6>Flight Details</h6>
+                            <div class="card">
+                                <div class="card-body">
+                                    <p><strong>Flight:</strong> {{ticket.flight.origin.code}} &#8594; {{ticket.flight.destination.code}}</p>
+                                    <p><strong>Date:</strong> {{ticket.flight_ddate|date:"D, M d Y"}}</p>
+                                    <p><strong>Passengers:</strong> {{ticket.passengers.count}}</p>
+                                    <p><strong>Class:</strong> {{ticket.seat_class|title}}</p>
+                                    <p><strong>Total Amount:</strong> ${{base_amount|inr_to_usd|format_usd}}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Points Redemption -->
+                        <div class="miles-redemption mb-4">
+                            <h6>Use Your Miles</h6>
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <p><strong>Available Miles:</strong> {{available_points|floatformat:0}}</p>
+                                            <p><strong>Current Tier:</strong> {{loyalty_account.current_tier.display_name|default:"Regular"}}</p>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <p><strong>Miles Value:</strong> 1 mile = ${{points_value_rate}}</p>
+                                            <p><strong>Max Usable:</strong> {{max_points_usable|floatformat:0}} miles</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="form-group mt-3">
+                                        <label for="miles-slider">Miles to Use:</label>
+                                        <input type="range"
+                                               id="miles-slider"
+                                               class="form-control-range" 
+                                               min="0" 
+                                               max="{{max_points_usable}}" 
+                                               value="0" 
+                                               step="100">
+                                        <div class="d-flex justify-content-between">
+                                            <span>0</span>
+                                            <span id="miles-value">0</span>
+                                            <span>{{max_points_usable|floatformat:0}}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Payment Summary -->
+                        <div class="payment-summary mb-4">
+                            <h6>Payment Breakdown</h6>
+                            <div class="card">
+                                <div class="card-body">
+                                    <p><strong>Original Total:</strong> ${{base_amount|inr_to_usd|format_usd}}</p>
+                                    <p><strong>Miles Used:</strong> <span id="miles-used">0</span></p>
+                                    <p><strong>Miles Value:</strong> <span id="miles-discount">$0.00</span></p>
+                                    <p><strong>Cash Amount:</strong> <span id="cash-amount">${{base_amount|inr_to_usd|format_usd}}</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // JavaScript for hybrid checkout functionality
+        const milesSlider = document.getElementById('miles-slider');
+        const milesValue = document.getElementById('miles-value');
+        const milesUsed = document.getElementById('miles-used');
+        const milesDiscount = document.getElementById('miles-discount');
+        const cashAmount = document.getElementById('cash-amount');
+        
+        const baseAmount = parseFloat('{{base_amount|inr_to_usd|format_usd}}');
+        const milesRate = parseFloat('{{points_value_rate}}');
+
+        milesSlider.addEventListener('input', function() {
+            const miles = parseInt(this.value);
+            const discount = miles * milesRate;
+            const remaining = Math.max(0, baseAmount - discount);
+
+            milesValue.textContent = miles;
+            milesUsed.textContent = miles;
+            milesDiscount.textContent = '$' + discount.toFixed(2);
+            cashAmount.textContent = '$' + remaining.toFixed(2);
+        });
+    </script>
+{% endblock %}
