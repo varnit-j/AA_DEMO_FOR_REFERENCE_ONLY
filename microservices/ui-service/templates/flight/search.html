@@ -184,7 +184,7 @@
                                             <div class="price-range-output">
                                                 <div class="initial-price-range">
                                                     <span class="currency-symbol">$</span>
-                                                    <span class="initial-price-value">{{min_price|inr_to_usd|format_usd}}</span>
+                                                    <span class="initial-price-value">{{min_price|format_usd}}</span>
                                                 </div>
                                                 <div class="final-price-range">
                                                     <span class="currency-symbol">$</span>
@@ -361,13 +361,19 @@
                                                 </div>
                                                 <div class="company-details">
                                                     <div class="company-name">{{flight.airline}}</div>
-                                                    <div class="plane-name">{{flight.plane}}</div>
+                                                    <div class="plane-name">
+                                                        {% if flight.flight_number %}
+                                                            {{flight.flight_number}} ({{flight.plane}})
+                                                        {% else %}
+                                                            {{flight.plane}}
+                                                        {% endif %}
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div class="flight-time flight-time-div">
                                                 <div class="flight-origin-time">
                                                     <div class="flight-time">
-                                                        <h5>{{flight.depart_time|time:"H:i"}}</h5>
+                                                        <h5>{{flight.depart_time_display}}</h5>
                                                     </div>
                                                     <div class="flight-place">
                                                         {{flight.origin.city}}
@@ -381,7 +387,7 @@
                                                 </div>
                                                 <div class="flight-destination-time">
                                                     <div class="flight-time">
-                                                        <h5>{{flight.arrival_time|time:"H:i"}}</h5>
+                                                        <h5>{{flight.arrival_time_display}}</h5>
                                                     </div>
                                                     <div class="flight-place">
                                                         {{flight.destination.city}}
@@ -393,9 +399,9 @@
                                                     <h5>
                                                         $
                                                         <span>
-                                                            {% if seat == 'economy' %}{{flight.economy_fare|inr_to_usd|format_usd}}{% endif %}
-                                                            {% if seat == 'business' %}{{flight.business_fare|inr_to_usd|format_usd}}{% endif %}
-                                                            {% if seat == 'first' %}{{flight.first_fare|inr_to_usd|format_usd}}{% endif %}
+                                                            {% if seat == 'economy' %}{{flight.economy_fare|format_usd}}{% endif %}
+                                                            {% if seat == 'business' %}{{flight.business_fare|format_usd}}{% endif %}
+                                                            {% if seat == 'first' %}{{flight.first_fare|format_usd}}{% endif %}
                                                         </span>
                                                     </h5>
                                                 </div>
@@ -470,7 +476,7 @@
                                                 <div class="price-range-output">
                                                     <div class="initial-price-range">
                                                         <span class="currency-symbol">$</span>
-                                                        <span class="initial-price-value">{{min_price2|inr_to_usd|format_usd}}</span>
+                                                        <span class="initial-price-value">{{min_price2|format_usd}}</span>
                                                     </div>
                                                     <div class="final-price-range">
                                                         <span class="currency-symbol">$</span>
@@ -647,7 +653,13 @@
                                                     </div>
                                                     <div class="company-details">
                                                         <div class="company-name">{{flight2.airline}}</div>
-                                                        <div class="plane-name">{{flight2.plane}}</div>
+                                                        <div class="plane-name">
+                                                            {% if flight2.flight_number %}
+                                                                {{flight2.flight_number}} ({{flight2.plane}})
+                                                            {% else %}
+                                                                {{flight2.plane}}
+                                                            {% endif %}
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 <div class="flight-time">
@@ -679,9 +691,9 @@
                                                         <h5>
                                                             $
                                                             <span>
-                                                                {% if seat == 'economy' %}{{flight2.economy_fare|inr_to_usd|format_usd}}{% endif %}
-                                                                {% if seat == 'business' %}{{flight2.business_fare|inr_to_usd|format_usd}}{% endif %}
-                                                                {% if seat == 'first' %}{{flight2.first_fare|inr_to_usd|format_usd}}{% endif %}
+                                                                {% if seat == 'economy' %}{{flight2.economy_fare|format_usd}}{% endif %}
+                                                                {% if seat == 'business' %}{{flight2.business_fare|format_usd}}{% endif %}
+                                                                {% if seat == 'first' %}{{flight2.first_fare|format_usd}}{% endif %}
                                                             </span>
                                                         </h5>
                                                     </div>
@@ -742,16 +754,22 @@
                             <span>{{destination.code|upper}}</span>&nbsp;&nbsp;@&nbsp;&nbsp;$
                             <span id="select-f1-fare">
                                 {% if seat == "Economy" %}
-                                    {{flights.all.0.economy_fare|inr_to_usd|format_usd}}
+                                    {{flights.all.0.economy_fare|format_usd}}
                                 {% elif seat == "Business" %}
-                                    {{flights.all.0.business_fare|inr_to_usd|format_usd}}
+                                    {{flights.all.0.business_fare|format_usd}}
                                 {% else %}
-                                    {{flights.all.0.first_fare|inr_to_usd|format_usd}}
+                                    {{flights.all.0.first_fare|format_usd}}
                                 {% endif %}
                             </span><!---->
                         </div>
                         <div class="white-2">
-                            <span id="select-f1-plane">{{flights.all.0.plane}}</span><!---->
+                            <span id="select-f1-plane">
+                                {% if flights.all.0.flight_number %}
+                                    {{flights.all.0.flight_number}}
+                                {% else %}
+                                    {{flights.all.0.plane}}
+                                {% endif %}
+                            </span><!---->
                             &nbsp;&nbsp;
                             <span id="select-f1-depart">{{flights.all.0.depart_time | time:"H:i"}}</span><!---->
                             •
@@ -772,18 +790,24 @@
                                 &nbsp;&nbsp;@&nbsp;&nbsp;$
                                 <span id="select-f2-fare">
                                     {% if seat == "Economy" %}
-                                        {{flights2.all.0.economy_fare|inr_to_usd|format_usd}}
+                                        {{flights2.all.0.economy_fare|format_usd}}
                                     {% elif seat == "Business" %}
-                                        {{flights2.all.0.business_fare|inr_to_usd|format_usd}}
+                                        {{flights2.all.0.business_fare|format_usd}}
                                     {% else %}
-                                        {{flights2.all.0.first_fare|inr_to_usd|format_usd}}
+                                        {{flights2.all.0.first_fare|format_usd}}
                                     {% endif %}
                                 </span><!---->
                             {% endif %}
                         </div>
                         <div class="white-2">
                             {% if flights2 %}
-                                <span id="select-f2-plane">{{flights2.all.0.plane}}</span><!---->
+                                <span id="select-f2-plane">
+                                    {% if flights2.all.0.flight_number %}
+                                        {{flights2.all.0.flight_number}}
+                                    {% else %}
+                                        {{flights2.all.0.plane}}
+                                    {% endif %}
+                                </span><!---->
                                 &nbsp;&nbsp;
                                 <span id="select-f2-depart">{{flights2.all.0.depart_time | time:"H:i"}}</span><!---->
                                 •

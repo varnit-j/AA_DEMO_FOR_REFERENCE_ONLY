@@ -34,7 +34,7 @@
                                     <p><strong>Date:</strong> {{ticket.flight_ddate|date:"D, M d Y"}}</p>
                                     <p><strong>Passengers:</strong> {{ticket.passengers.count}}</p>
                                     <p><strong>Class:</strong> {{ticket.seat_class|title}}</p>
-                                    <p><strong>Total Amount:</strong> ${{base_amount|inr_to_usd|format_usd}}</p>
+                                    <p><strong>Total Amount:</strong> ${{base_amount|format_usd}}</p>
                                 </div>
                             </div>
                         </div>
@@ -79,10 +79,10 @@
                             <h6>Payment Breakdown</h6>
                             <div class="card">
                                 <div class="card-body">
-                                    <p><strong>Original Total:</strong> ${{base_amount|inr_to_usd|format_usd}}</p>
+                                    <p><strong>Original Total:</strong> ${{base_amount|format_usd}}</p>
                                     <p><strong>Miles Used:</strong> <span id="miles-used">0</span></p>
                                     <p><strong>Miles Value:</strong> <span id="miles-discount">$0.00</span></p>
-                                    <p><strong>Cash Amount:</strong> <span id="cash-amount">${{base_amount|inr_to_usd|format_usd}}</span></p>
+                                    <p><strong>Cash Amount:</strong> <span id="cash-amount">${{base_amount|format_usd}}</span></p>
                                 </div>
                             </div>
                         </div>
@@ -100,7 +100,7 @@
         const milesDiscount = document.getElementById('miles-discount');
         const cashAmount = document.getElementById('cash-amount');
         
-        const baseAmount = parseFloat('{{base_amount|inr_to_usd|format_usd}}');
+        const baseAmount = parseFloat('{{base_amount|format_usd}}');
         const milesRate = parseFloat('{{points_value_rate}}');
 
         milesSlider.addEventListener('input', function() {

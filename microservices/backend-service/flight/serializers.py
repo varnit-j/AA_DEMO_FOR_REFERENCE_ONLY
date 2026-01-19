@@ -67,12 +67,13 @@ class FlightSerializer(serializers.ModelSerializer):
     origin = PlaceSerializer(read_only=True)
     destination = PlaceSerializer(read_only=True)
     depart_day = WeekSerializer(many=True, read_only=True)
+    # Include flight_number in serialization
 
     class Meta:
         model = Flight
         fields = [
             'id', 'origin', 'destination', 'depart_time', 'depart_day',
-            'duration', 'arrival_time', 'plane', 'airline',
+            'duration', 'arrival_time', 'plane', 'airline', 'flight_number',
             'economy_fare', 'business_fare', 'first_fare'
         ]
 

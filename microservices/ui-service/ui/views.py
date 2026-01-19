@@ -13,6 +13,7 @@ from datetime import datetime
 import math
 import re
 from decimal import Decimal
+from . import loyalty_tracker
 
 # Fee and Surcharge variable
 FEE = 50.0
@@ -168,9 +169,18 @@ def flight(request):
         flights = flight_data.get('flights', [])
         print(f"[DEBUG] Number of flights: {len(flights)}")
         
+        # Convert time strings to proper format for template display
+        for flight in flights:
+            # Convert time strings like "08:09:00" to "08:09" for display
+            if 'depart_time' in flight and flight['depart_time']:
+                flight['depart_time_display'] = flight['depart_time'][:5]  # "08:09:00" -> "08:09"
+            if 'arrival_time' in flight and flight['arrival_time']:
+                flight['arrival_time_display'] = flight['arrival_time'][:5]  # "10:42:00" -> "10:42"
+        
         if flights:
             print(f"[DEBUG] First flight data: {flights[0]}")
             print(f"[DEBUG] First flight fare fields: economy_fare={flights[0].get('economy_fare')}, business_fare={flights[0].get('business_fare')}, first_fare={flights[0].get('first_fare')}")
+            print(f"[DEBUG] First flight time fields: depart_time_display={flights[0].get('depart_time_display')}, arrival_time_display={flights[0].get('arrival_time_display')}")
         
         # Prepare context for template
         context = {
@@ -309,22 +319,11 @@ def book(request):
                 # Add fee
                 total_fare = fare + FEE
                 
-                # Get user's loyalty points for payment
-                user_points = 0
-                points_value = 0
-                try:
-                    print(f"[DEBUG] Fetching loyalty points for user {request.user.id}")
-                    loyalty_url = settings.LOYALTY_SERVICE_URL
-                    loyalty_response = requests.get(f"{loyalty_url}/api/loyalty/", params={'user_id': request.user.id})
-                    if loyalty_response.status_code == 200:
-                        loyalty_data = loyalty_response.json()
-                        user_points = loyalty_data.get('points_balance', 0)
-                        points_value = user_points * 0.01  # 1 point = $0.01
-                        print(f"[DEBUG] Retrieved {user_points} points (${points_value:.2f} value) for user {request.user.id}")
-                    else:
-                        print(f"[DEBUG] Failed to fetch loyalty points: {loyalty_response.status_code}")
-                except Exception as e:
-                    print(f"[DEBUG] Error fetching loyalty points: {e}")
+                # Get user's loyalty points from local tracker
+                user_loyalty = loyalty_tracker.get_user_points(request.user.id)
+                user_points = user_loyalty.get('points_balance', 0)
+                points_value = user_points * 0.01  # 1 point = $0.01
+                print(f"[DEBUG] Retrieved {user_points} points (${points_value:.2f} value) from local tracker")
                 
                 # Prepare payment context with all required variables
                 payment_context = {
@@ -384,7 +383,7 @@ def payment(request):
             ticket_ref = payment_data.get('ticket')
             payment_method = payment_data.get('payment_method', 'card')
             
-            # Log points redemption details - Fix empty string conversion
+            # Handle points redemption with local tracker
             points_to_use_raw = payment_data.get('points_to_use', 0)
             if points_to_use_raw == '' or points_to_use_raw is None:
                 points_to_use = 0
@@ -394,58 +393,33 @@ def payment(request):
                 except (ValueError, TypeError):
                     print(f"[DEBUG] Invalid points_to_use value: '{points_to_use_raw}', defaulting to 0")
                     points_to_use = 0
+            
             if points_to_use > 0:
                 points_value = points_to_use * 0.01
                 print(f"[DEBUG] User wants to redeem {points_to_use} points (${points_value:.2f} value)")
                 
-                # Redeem points from loyalty service
-                try:
-                    loyalty_url = settings.LOYALTY_SERVICE_URL
-                    redeem_url = f"{loyalty_url}/api/loyalty/points/redeem/"
-                    
-                    redeem_data = {
-                        'user_id': request.user.id,
-                        'points_to_redeem': points_to_use,
-                        'transaction_id': payment_data.get('ticket', '')
-                    }
-                    
-                    print(f"[DEBUG] Redeeming points: {redeem_data}")
-                    redeem_response = requests.post(redeem_url, json=redeem_data)
-                    if redeem_response.status_code == 200:
-                        redeem_result = redeem_response.json()
-                        print(f"[DEBUG] Points redeemed successfully: {redeem_result}")
-                    else:
-                        print(f"[DEBUG] Failed to redeem points: {redeem_response.status_code}")
-                except Exception as e:
-                    print(f"[DEBUG] Error redeeming points: {e}")
+                # Redeem points using local tracker
+                if loyalty_tracker.redeem_points(request.user.id, points_to_use, payment_data.get('ticket', '')):
+                    print(f"[DEBUG] Points redeemed successfully from local tracker")
+                else:
+                    print(f"[DEBUG] Failed to redeem points - insufficient balance or error")
             else:
                 print(f"[DEBUG] No points redemption requested")
             
             # For now, simulate successful payment processing
             # In a real implementation, this would call a payment service
             
-            # Add loyalty points for the transaction
+            # Add loyalty points for the transaction using local tracker
+            # 1 USD paid = 1 point (correct logic as per user requirement)
             try:
-                # Use the actual payment amount for points calculation (1 dollar = 1 point)
-                fare_amount = float(payment_data.get('fare', 0))
+                fare_amount_usd = float(payment_data.get('fare', 0))
                 ticket_id = payment_data.get('ticket', '')
                 
-                loyalty_url = settings.LOYALTY_SERVICE_URL
-                points_url = f"{loyalty_url}/api/loyalty/points/add/"
-                
-                points_data = {
-                    'user_id': request.user.id,
-                    'amount': fare_amount,
-                    'transaction_id': ticket_id
-                }
-                
-                print(f"[DEBUG] Adding loyalty points: {points_data}")
-                points_response = requests.post(points_url, json=points_data)
-                if points_response.status_code == 200:
-                    points_result = points_response.json()
-                    print(f"[DEBUG] Points added successfully: {points_result}")
+                print(f"[DEBUG] Adding loyalty points: {fare_amount_usd} USD = {int(fare_amount_usd)} points")
+                if loyalty_tracker.add_points(request.user.id, fare_amount_usd, ticket_id):
+                    print(f"[DEBUG] Points added successfully to local tracker")
                 else:
-                    print(f"[DEBUG] Failed to add points: {points_response.status_code}")
+                    print(f"[DEBUG] Failed to add points to local tracker")
             except Exception as e:
                 print(f"[DEBUG] Error adding loyalty points: {e}")
             
@@ -581,7 +555,7 @@ def cancel_ticket(request):
             
             return JsonResponse({
                 'success': True,
-                'message': f'Ticket {booking_ref} cancelled successfully. {points_to_reverse} loyalty points have been deducted from your account.'
+                'message': f'Ticket {booking_ref} cancelled successfully.'
             })
             
         except Exception as e:
@@ -618,57 +592,43 @@ def about_us(request):
 def aadvantage_dashboard(request):
     """AAdvantage loyalty dashboard"""
     if request.user.is_authenticated:
-        # Call loyalty service API directly
+        # Use local loyalty tracker instead of external service
         try:
-            loyalty_url = settings.LOYALTY_SERVICE_URL
-            url = f"{loyalty_url}/api/loyalty/"
-            print(f"[DEBUG] Making request to loyalty service: {url}")
-            
-            # Pass user_id as parameter
-            response = requests.get(url, params={'user_id': request.user.id})
-            if response.status_code == 200:
-                loyalty_data = response.json()
-                print(f"[DEBUG] Loyalty service response: {loyalty_data}")
-                # Check if the response has the expected structure
-                if loyalty_data and 'points_balance' in loyalty_data:
-                    print(f"[DEBUG] Using loyalty service data with {loyalty_data['points_balance']} points")
-                else:
-                    print(f"[DEBUG] Invalid loyalty service response structure")
-                    loyalty_data = None
-            else:
-                print(f"[DEBUG] Loyalty service error: {response.status_code}")
-                loyalty_data = None
-        except Exception as e:
-            print(f"[DEBUG] Loyalty service call error: {e}")
-            loyalty_data = None
-            
-        # Get transaction history
-        transaction_history = []
-        try:
-            history_url = f"{loyalty_url}/api/loyalty/history/{request.user.id}/"
-            print(f"[DEBUG] Fetching transaction history from: {history_url}")
-            history_response = requests.get(history_url)
-            if history_response.status_code == 200:
-                history_data = history_response.json()
-                transaction_history = history_data.get('transactions', [])
-                print(f"[DEBUG] Retrieved {len(transaction_history)} transactions")
-            else:
-                print(f"[DEBUG] Transaction history error: {history_response.status_code}")
-        except Exception as e:
-            print(f"[DEBUG] Transaction history call error: {e}")
-            
-        if not loyalty_data:
-            # Fallback data if loyalty service is unavailable
+            user_loyalty = loyalty_tracker.get_user_points(request.user.id)
             loyalty_data = {
                 'status': 'active',
-                'user_tier': 'Gold',
-                'points_balance': 25000,
-                'miles_to_next_tier': 15000,
+                'user_tier': 'Member',
+                'points_balance': user_loyalty.get('points_balance', 0),
+                'miles_to_next_tier': 0,
                 'benefits': [
-                    'Priority boarding',
-                    'Free checked bags',
-                    'Lounge access',
-                    'Upgrade eligibility'
+                    'Earn 1 point per $1 spent',
+                    'Redeem points for discounts (1 point = $0.01)'
+                ]
+            }
+            print(f"[DEBUG] Using local loyalty tracker with {loyalty_data['points_balance']} points")
+        except Exception as e:
+            print(f"[DEBUG] Local loyalty tracker error: {e}")
+            loyalty_data = None
+            
+        # Get transaction history from local tracker
+        try:
+            transaction_history = loyalty_tracker.get_user_transactions(request.user.id)
+            print(f"[DEBUG] Retrieved {len(transaction_history)} transactions from local tracker")
+            print(f"[DEBUG] Transaction history data: {transaction_history}")
+        except Exception as e:
+            print(f"[DEBUG] Transaction history error: {e}")
+            transaction_history = []
+            
+        if not loyalty_data:
+            # Fallback if local tracker fails
+            loyalty_data = {
+                'status': 'active',
+                'user_tier': 'Member',
+                'points_balance': 0,
+                'miles_to_next_tier': 0,
+                'benefits': [
+                    'Earn 1 point per $1 spent',
+                    'Redeem points for discounts (1 point = $0.01)'
                 ]
             }
         

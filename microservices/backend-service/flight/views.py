@@ -8,6 +8,9 @@ from django.contrib.auth import login
 from django.db.models import Q
 from datetime import datetime
 import secrets
+import logging
+
+logger = logging.getLogger(__name__)
 
 from .models import User, Place, Flight, Passenger, Ticket, Week
 from .serializers import (
@@ -115,6 +118,13 @@ def flight_search(request):
             flights = flights.exclude(business_fare=0).order_by('business_fare')
         elif seat_class == 'first':
             flights = flights.exclude(first_fare=0).order_by('first_fare')
+        
+        # Add diagnostic logging for currency debugging and flight number validation
+        logger.info(f"[CURRENCY DEBUG] Found {flights.count()} flights for {origin_code} -> {destination_code}")
+        logger.info(f"[FLIGHT NUMBER DEBUG] Validating flight number vs aircraft type display:")
+        for flight in flights:
+            logger.info(f"[CURRENCY DEBUG] Flight ID {flight.id}: Economy={flight.economy_fare}, Business={flight.business_fare}, First={flight.first_fare}")
+            logger.info(f"[FLIGHT NUMBER DEBUG] Flight ID {flight.id}: flight_number='{flight.flight_number}', plane='{flight.plane}', airline='{flight.airline}'")
         
         flight_serializer = FlightSerializer(flights, many=True)
         return Response({

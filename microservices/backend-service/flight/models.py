@@ -37,12 +37,14 @@ class Flight(models.Model):
     arrival_time = models.TimeField(auto_now=False, auto_now_add=False)
     plane = models.CharField(max_length=24)
     airline = models.CharField(max_length=64)
+    flight_number = models.CharField(max_length=10, blank=True, null=True)  # Added flight number field
     economy_fare = models.FloatField(null=True)
     business_fare = models.FloatField(null=True)
     first_fare = models.FloatField(null=True)
 
     def __str__(self):
-        return f"{self.pk or 'New'}: {self.origin} to {self.destination}"
+        flight_display = self.flight_number if self.flight_number else f"Flight {self.pk}"
+        return f"{flight_display}: {self.origin} to {self.destination}"
 
 
 GENDER = (

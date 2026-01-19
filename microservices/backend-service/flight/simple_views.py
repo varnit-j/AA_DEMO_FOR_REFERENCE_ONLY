@@ -68,6 +68,7 @@ def flight_search(request):
                 'id': flight.id,
                 'plane': flight.plane,
                 'airline': flight.airline,
+                'flight_number': flight.flight_number,  # Added flight number
                 'origin': {
                     'code': flight.origin.code,
                     'city': flight.origin.city,
@@ -155,6 +156,7 @@ def book_flight(request):
             'id': flight.id,
             'plane': flight.plane,
             'airline': flight.airline,
+            'flight_number': flight.flight_number,  # Added flight number
             'origin': {
                 'code': flight.origin.code,
                 'city': flight.origin.city,
@@ -285,6 +287,7 @@ def get_flight_detail(request, flight_id):
             'id': flight.id,
             'plane': flight.plane,
             'airline': flight.airline,
+            'flight_number': flight.flight_number,  # Added flight number
             'origin': {
                 'code': flight.origin.code,
                 'city': flight.origin.city,

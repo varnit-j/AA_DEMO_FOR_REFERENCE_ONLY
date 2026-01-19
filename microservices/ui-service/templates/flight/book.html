@@ -30,7 +30,13 @@
                         <div>
                             <div class="brand">{{flight1.airline}}</div>
                             <div>&nbsp;&middot;&nbsp;</div>
-                            <div class="plane-name">{{flight1.plane}}</div>
+                            <div class="plane-name">
+                                {% if flight1.flight_number %}
+                                    {{flight1.flight_number}}
+                                {% else %}
+                                    {{flight1.plane}}
+                                {% endif %}
+                            </div>
                             <div>&nbsp;&middot;&nbsp;</div>
                             <div class="plane-name">{{seat}}</div>
                         </div>
@@ -38,7 +44,13 @@
                     <div class="row ticket-details-div">
                         <div class="col-3 airline-name">
                             <div class="brand">{{flight1.airline}}</div>
-                            <div class="plane-name">{{flight1.plane}}</div>
+                            <div class="plane-name">
+                                {% if flight1.flight_number %}
+                                    {{flight1.flight_number}} ({{flight1.plane}})
+                                {% else %}
+                                    {{flight1.plane}}
+                                {% endif %}
+                            </div>
                         </div>
                         <div class="col-3 depart-time">
                             <div class="time">{{flight1.depart_time | time:'H:i'}}</div>
@@ -64,7 +76,13 @@
                             <div>
                                 <div class="brand">{{flight2.airline}}</div>
                                 <div>&nbsp;&middot;&nbsp;</div>
-                                <div class="plane-name">{{flight2.plane}}</div>
+                                <div class="plane-name">
+                                    {% if flight2.flight_number %}
+                                        {{flight2.flight_number}}
+                                    {% else %}
+                                        {{flight2.plane}}
+                                    {% endif %}
+                                </div>
                                 <div>&nbsp;&middot;&nbsp;</div>
                                 <div class="plane-name">{{seat}}</div>
                             </div>
@@ -72,7 +90,13 @@
                         <div class="row ticket-details-div">
                             <div class="col-3 airline-name">
                                 <div class="brand">{{flight2.airline}}</div>
-                                <div class="plane-name">{{flight2.plane}}</div>
+                                <div class="plane-name">
+                                    {% if flight2.flight_number %}
+                                        {{flight2.flight_number}} ({{flight2.plane}})
+                                    {% else %}
+                                        {{flight2.plane}}
+                                    {% endif %}
+                                </div>
                             </div>
                             <div class="col-3 depart-time">
                                 <div class="time">{{flight2.depart_time | time:'H:i'}}</div>
@@ -416,27 +440,27 @@
                                 {% if seat == 'first' %}
                                     <span>
                                         {% if flight2 %}
-                                            ${{flight1.first_fare | add:flight2.first_fare|inr_to_usd|format_usd}}
+                                            ${{flight1.first_fare | add:flight2.first_fare|format_usd}}
                                         {% else %}
-                                            ${{flight1.first_fare|inr_to_usd|format_usd}}
+                                            ${{flight1.first_fare|format_usd}}
                                         {% endif %}
                                         </span>
                                     <input type="hidden" id="basefare" value="{% if flight2 %}{{flight1.first_fare | add:flight2.first_fare}}{% else %}{{flight1.first_fare}}{% endif %}">
                                 {% elif seat == 'business' %}
                                     <span>
                                         {% if flight2 %}
-                                            ${{flight1.business_fare | add:flight2.business_fare|inr_to_usd|format_usd}}
+                                            ${{flight1.business_fare | add:flight2.business_fare|format_usd}}
                                         {% else %}
-                                            ${{flight1.business_fare|inr_to_usd|format_usd}}
+                                            ${{flight1.business_fare|format_usd}}
                                         {% endif %}
                                         </span>
                                     <input type="hidden" id="basefare" value="{% if flight2 %}{{flight1.business_fare | add:flight2.business_fare}}{% else %}{{flight1.business_fare}}{% endif %}">
                                 {% elif seat == 'economy' %}
                                     <span>
                                         {% if flight2 %}
-                                            ${{flight1.economy_fare | add:flight2.economy_fare|inr_to_usd|format_usd}}
+                                            ${{flight1.economy_fare | add:flight2.economy_fare|format_usd}}
                                         {% else %}
-                                            ${{flight1.economy_fare|inr_to_usd|format_usd}}
+                                            ${{flight1.economy_fare|format_usd}}
                                         {% endif %}
                                     </span>
                                     <input type="hidden" id="basefare" value="{% if flight2 %}{{flight1.economy_fare | add:flight2.economy_fare}}{% else %}{{flight1.economy_fare}}{% endif %}">
@@ -445,7 +469,7 @@
                         </div>
                         <div class="row surcharges">
                             <div class="surcharges-label">Fee & Surcharges: </div>
-                            <div class="surcharges-value"><span>${{fee|inr_to_usd|format_usd}}</span></div>
+                            <div class="surcharges-value"><span>${{fee|format_usd}}</span></div>
                             <input type="hidden" id="fee" value="{{fee}}">
                         </div>
                         <hr>
@@ -455,25 +479,25 @@
                                 {% if seat == 'first' %}
                                     <span>
                                         {% if flight2 %}
-                                            ${{flight1.first_fare | add:flight2.first_fare | add:fee|inr_to_usd|format_usd}}
+                                            ${{flight1.first_fare | add:flight2.first_fare | add:fee|format_usd}}
                                         {% else %}
-                                            ${{flight1.first_fare | add:fee|inr_to_usd|format_usd}}
+                                            ${{flight1.first_fare | add:fee|format_usd}}
                                         {% endif %}
                                     </span>
                                 {% elif seat == 'business' %}
                                     <span>
                                         {% if flight2 %}
-                                            ${{flight1.business_fare | add:flight2.business_fare | add:fee|inr_to_usd|format_usd}}
+                                            ${{flight1.business_fare | add:flight2.business_fare | add:fee|format_usd}}
                                         {% else %}
-                                            ${{flight1.business_fare | add:fee|inr_to_usd|format_usd}}
+                                            ${{flight1.business_fare | add:fee|format_usd}}
                                         {% endif %}
                                     </span>
                                 {% elif seat == 'economy' %}
                                     <span>
                                         {% if flight2 %}
-                                            ${{flight1.economy_fare | add:flight2.economy_fare | add:fee|inr_to_usd|format_usd}}
+                                            ${{flight1.economy_fare | add:flight2.economy_fare | add:fee|format_usd}}
                                         {% else %}
-                                            ${{flight1.economy_fare | add:fee|inr_to_usd|format_usd}}
+                                            ${{flight1.economy_fare | add:fee|format_usd}}
                                         {% endif %}
                                         </span>
                                 {% endif %}

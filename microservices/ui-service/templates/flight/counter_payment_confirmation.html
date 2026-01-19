@@ -64,7 +64,7 @@
                                     <div class="card-body">
                                         <div class="row">
                                             <div class="col-md-6">
-                                                <p><strong>Original Total:</strong> ${{ticket1.total_fare|inr_to_usd|format_usd}}</p>
+                                                <p><strong>Original Total:</strong> ${{ticket1.total_fare|format_usd}}</p>
                                                 {% if points_redeemed > 0 %}
                                                 <p><strong>Miles Redeemed:</strong> {{points_redeemed}} miles</p>
                                                 <p><strong>Miles Value:</strong> ${{points_redeemed|floatformat:0|mul:0.01|floatformat:2}}</p>
@@ -72,7 +72,7 @@
                                             </div>
                                             <div class="col-md-6">
                                                 <p><strong>Amount to Pay at Counter:</strong>
-                                                    <span class="text-danger font-weight-bold">${{remaining_amount|inr_to_usd|format_usd}}</span>
+                                                    <span class="text-danger font-weight-bold">${{remaining_amount|format_usd}}</span>
                                                 </p>
                                             </div>
                                         </div>
@@ -88,7 +88,7 @@
                                         <ol>
                                             <li><strong>Arrive at Airport:</strong> Arrive at least 2 hours before domestic flights or 3 hours before international flights</li>
                                             <li><strong>Visit Counter:</strong> Go to the airline counter with your ticket reference: <strong>{{ticket1.ref_no}}</strong></li>
-                                            <li><strong>Complete Payment:</strong> Pay the remaining amount of <strong>${{remaining_amount|inr_to_usd|format_usd}}</strong></li>
+                                            <li><strong>Complete Payment:</strong> Pay the remaining amount of <strong>${{remaining_amount|format_usd}}</strong></li>
                                             <li><strong>Get Boarding Pass:</strong> Once payment is complete, you'll receive your boarding pass</li>
                                         </ol>
                                         

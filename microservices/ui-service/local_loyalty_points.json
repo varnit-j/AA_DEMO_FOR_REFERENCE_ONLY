@@ -1,0 +1,47 @@
+{
+  "1": {
+    "points_balance": 677,
+    "transactions": [
+      {
+        "date": "2026-01-19 15:05",
+        "type": "flight_booking",
+        "points_earned": 170,
+        "amount": 170.5,
+        "transaction_id": "TEST_BOOKING_001",
+        "description": "Flight booking - $170.50"
+      },
+      {
+        "date": "2026-01-19 15:05",
+        "type": "flight_booking",
+        "points_earned": 85,
+        "amount": 85.25,
+        "transaction_id": "TEST_BOOKING_002",
+        "description": "Flight booking - $85.25"
+      },
+      {
+        "date": "2026-01-19 15:30",
+        "type": "flight_booking",
+        "points_earned": 2,
+        "amount": 2.42,
+        "transaction_id": "BKF439449D",
+        "description": "Flight booking - $2.42"
+      },
+      {
+        "date": "2026-01-19 15:33",
+        "type": "flight_booking",
+        "points_earned": 200,
+        "amount": 200.0,
+        "transaction_id": "BK65E7F22B",
+        "description": "Flight booking - $200.00"
+      },
+      {
+        "date": "2026-01-19 15:45",
+        "type": "flight_booking",
+        "points_earned": 220,
+        "amount": 220.0,
+        "transaction_id": "BKC36CB870",
+        "description": "Flight booking - $220.00"
+      }
+    ]
+  }
+}

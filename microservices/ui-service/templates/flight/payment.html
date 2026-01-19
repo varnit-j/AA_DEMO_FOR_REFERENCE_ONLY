@@ -101,9 +101,9 @@
                         <div class="row payment-amount-div">
                             <div class="form-group">
                                 <label for="payment_amount">PAYMENT AMOUNT</label>
-                                <input type="text" class="form-control" id="payment_amount" name="fare" value="$ {{fare|inr_to_usd|format_usd}}" disabled required>
-                                <input type="hidden" id="original_fare" value="{{fare|inr_to_usd|format_usd}}">
-                                <input type="hidden" id="final_fare" name="final_fare" value="{{fare|inr_to_usd|format_usd}}">
+                                <input type="text" class="form-control" id="payment_amount" name="fare" value="$ {{fare|format_usd}}" disabled required>
+                                <input type="hidden" id="original_fare" value="{{fare|format_usd}}">
+                                <input type="hidden" id="final_fare" name="final_fare" value="{{fare|format_usd}}">
                             </div>
                         </div>
                         <div class="row card-no-div">
