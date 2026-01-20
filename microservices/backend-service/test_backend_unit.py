@@ -23,9 +23,9 @@ class BackendServiceUnitTests(unittest.TestCase):
             try:
                 data = response.json()
                 self.assertIsInstance(data, list)
-                print(f"✅ Flight List API: {len(data)} flights returned")
+                print(f"SUCCESS Flight List API: {len(data)} flights returned")
             except json.JSONDecodeError:
-                print("✅ Flight List API: Response received (non-JSON)")
+                print("SUCCESS Flight List API: Response received (non-JSON)")
     
     def test_places_api(self):
         """Test places API endpoint"""
@@ -36,9 +36,9 @@ class BackendServiceUnitTests(unittest.TestCase):
             try:
                 data = response.json()
                 self.assertIsInstance(data, list)
-                print(f"✅ Places API: {len(data)} places returned")
+                print(f"SUCCESS Places API: {len(data)} places returned")
             except json.JSONDecodeError:
-                print("✅ Places API: Response received (non-JSON)")
+                print("SUCCESS Places API: Response received (non-JSON)")
     
     def test_flight_search_api(self):
         """Test flight search API endpoint"""
@@ -50,14 +50,14 @@ class BackendServiceUnitTests(unittest.TestCase):
         
         response = self.session.get(f"{self.base_url}/api/flights/search/", params=search_params)
         self.assertIn(response.status_code, [200, 404, 400])
-        print(f"✅ Flight Search API: Status {response.status_code}")
+        print(f"SUCCESS Flight Search API: Status {response.status_code}")
     
     def test_health_endpoint(self):
         """Test health check endpoint"""
         response = self.session.get(f"{self.base_url}/api/health/")
         # Health endpoint might not exist, so we accept 404
         self.assertIn(response.status_code, [200, 404])
-        print(f"✅ Health Check: Status {response.status_code}")
+        print(f"SUCCESS Health Check: Status {response.status_code}")
 
 if __name__ == '__main__':
     print("Running Backend Service Unit Tests...")

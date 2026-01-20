@@ -1,9 +1,11 @@
 from django.urls import path
 from . import simple_views
 
-# Import SAGA views
+# Import improved SAGA views
 try:
-    from . import saga_views_complete
+    from . import saga_steps
+    from . import saga_compensation
+    from . import saga_views_improved
     SAGA_AVAILABLE = True
 except ImportError:
     SAGA_AVAILABLE = False
@@ -22,22 +24,21 @@ urlpatterns = [
     
     # Tickets
     path('tickets/user/<int:user_id>/', simple_views.get_user_tickets, name='get_user_tickets'),
-    path('tickets/user/<int:user_id>/with-saga/', simple_views.get_user_tickets_with_saga, name='get_user_tickets_with_saga'),
     path('tickets/<str:booking_ref>/update_status/', simple_views.update_ticket_status, name='update_ticket_status'),
 ]
 
-# Add SAGA endpoints if available
+# Add improved SAGA endpoints if available
 if SAGA_AVAILABLE:
     urlpatterns += [
-        # SAGA Action endpoints
-        path('saga/reserve-seat/', saga_views_complete.reserve_seat, name='saga_reserve_seat'),
-        path('saga/confirm-booking/', saga_views_complete.confirm_booking, name='saga_confirm_booking'),
-        path('saga/start-booking/', saga_views_complete.start_booking_saga, name='saga_start_booking'),
+        # SAGA Action endpoints with real seat reservation
+        path('saga/reserve-seat/', saga_steps.reserve_seat, name='saga_reserve_seat'),
+        path('saga/confirm-booking/', saga_steps.confirm_booking, name='saga_confirm_booking'),
+        path('saga/start-booking/', saga_views_improved.start_booking_saga, name='saga_start_booking'),
         
         # SAGA Compensation endpoints
-        path('saga/cancel-seat/', saga_views_complete.cancel_seat, name='saga_cancel_seat'),
-        path('saga/cancel-booking/', saga_views_complete.cancel_booking, name='saga_cancel_booking'),
+        path('saga/cancel-seat/', saga_compensation.cancel_seat, name='saga_cancel_seat'),
+        path('saga/cancel-booking/', saga_compensation.cancel_booking, name='saga_cancel_booking'),
         
         # SAGA Management endpoints
-        path('saga/status/<str:correlation_id>/', saga_views_complete.get_saga_status, name='saga_status'),
+        path('saga/status/<str:correlation_id>/', saga_compensation.get_saga_status, name='saga_status'),
     ]

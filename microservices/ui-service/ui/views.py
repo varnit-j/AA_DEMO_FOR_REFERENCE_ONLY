@@ -297,15 +297,26 @@ def book(request):
                     'error': 'No passengers added. Please add at least one passenger.',
                 })
             
-            # Call backend booking API
-            print(f"[DEBUG] Calling backend booking API...")
-            booking_result = call_backend_api('api/flights/book/', 'POST', booking_data)
-            print(f"[DEBUG] Booking API result: {booking_result}")
+            # Call SAGA booking API instead of traditional booking
+            print(f"[DEBUG] Calling SAGA booking API...")
+            booking_result = call_backend_api('api/saga/start-booking/', 'POST', booking_data)
+            print(f"[DEBUG] SAGA Booking API result: {booking_result}")
             
             if booking_result and booking_result.get('success'):
-                print(f"[DEBUG] Booking successful, proceeding to payment")
-                # Get flight data for payment context
-                flight_data = booking_result.get('flight', {})
+                print(f"[DEBUG] SAGA Booking successful, proceeding to payment")
+                print(f"[DEBUG] SAGA Correlation ID: {booking_result.get('correlation_id')}")
+                print(f"[DEBUG] SAGA Steps completed: {booking_result.get('steps_completed')}")
+                
+                # Get flight data from the original booking data since SAGA doesn't return flight details
+                flight_id = booking_data.get('flight_id')
+                flight_data = call_backend_api(f'api/flights/{flight_id}/')
+                
+                if not flight_data:
+                    print(f"[DEBUG] ERROR: Could not retrieve flight data for flight {flight_id}")
+                    return render(request, "flight/book.html", {
+                        'error': 'Could not retrieve flight information. Please try again.',
+                        'booking_data': booking_data
+                    })
                 seat_class = request.POST.get('flight1Class', 'economy')
                 
                 # Calculate fare based on seat class
@@ -325,17 +336,19 @@ def book(request):
                 points_value = user_points * 0.01  # 1 point = $0.01
                 print(f"[DEBUG] Retrieved {user_points} points (${points_value:.2f} value) from local tracker")
                 
-                # Prepare payment context with all required variables
+                # Prepare payment context with SAGA correlation ID
+                correlation_id = booking_result.get('correlation_id')
                 payment_context = {
-                    'booking_reference': booking_result.get('booking_reference'),
+                    'booking_reference': correlation_id,
                     'flight': flight_data,
                     'fare': total_fare,
-                    'ticket': booking_result.get('booking_reference'),  # Use booking reference as ticket ID
+                    'ticket': correlation_id,  # Use SAGA correlation ID as ticket ID
                     'fee': FEE,
                     'seat': seat_class,
                     'user_points': user_points,
                     'points_value': points_value,
-                    'message': 'Booking successful! Proceed to payment.'
+                    'message': 'SAGA Booking successful! All services coordinated. Proceed to payment.',
+                    'saga_correlation_id': correlation_id
                 }
                 
                 print(f"[DEBUG] Payment context: {payment_context}")
@@ -343,13 +356,19 @@ def book(request):
                 print(f"[DEBUG] Currency debugging - total_fare: {total_fare}, flight_data: {flight_data}")
                 return render(request, "flight/payment.html", payment_context)
             else:
-                print(f"[DEBUG] Booking failed - API returned: {booking_result}")
-                error_msg = 'Booking failed. Please try again.'
+                print(f"[DEBUG] SAGA Booking failed - API returned: {booking_result}")
+                error_msg = 'SAGA Booking failed. Please try again.'
                 if booking_result and 'error' in booking_result:
-                    error_msg = f"Booking failed: {booking_result['error']}"
+                    error_msg = f"SAGA Booking failed: {booking_result['error']}"
+                    if 'failed_step' in booking_result:
+                        error_msg += f" (Failed at: {booking_result['failed_step']})"
+                    if 'compensation_result' in booking_result:
+                        comp_result = booking_result['compensation_result']
+                        error_msg += f" (Compensations executed: {comp_result.get('total_compensations', 0)})"
                 return render(request, "flight/book.html", {
                     'error': error_msg,
-                    'booking_data': booking_data
+                    'booking_data': booking_data,
+                    'saga_error': True
                 })
         else:
             # GET request - show booking form
@@ -396,55 +415,67 @@ def payment(request):
             
             if points_to_use > 0:
                 points_value = points_to_use * 0.01
-                print(f"[DEBUG] User wants to redeem {points_to_use} points (${points_value:.2f} value)")
+                print(f"[DEBUG] POINTS REDEMPTION - User wants to redeem {points_to_use} points (${points_value:.2f} value)")
                 
-                # Redeem points using local tracker
-                if loyalty_tracker.redeem_points(request.user.id, points_to_use, payment_data.get('ticket', '')):
-                    print(f"[DEBUG] Points redeemed successfully from local tracker")
-                else:
-                    print(f"[DEBUG] Failed to redeem points - insufficient balance or error")
+                # Call loyalty service to redeem points
+                try:
+                    loyalty_url = settings.LOYALTY_SERVICE_URL
+                    redeem_url = f"{loyalty_url}/api/loyalty/points/redeem/"
+                    
+                    redeem_data = {
+                        'user_id': request.user.id,
+                        'points_to_redeem': points_to_use,
+                        'transaction_id': f"PAYMENT_{ticket_ref}"
+                    }
+                    
+                    print(f"[DEBUG] POINTS REDEMPTION - Calling loyalty service URL: {redeem_url}")
+                    print(f"[DEBUG] POINTS REDEMPTION - Redemption data: {redeem_data}")
+                    redeem_response = requests.post(redeem_url, json=redeem_data)
+                    
+                    print(f"[DEBUG] POINTS REDEMPTION - Response status: {redeem_response.status_code}")
+                    print(f"[DEBUG] POINTS REDEMPTION - Response text: {redeem_response.text}")
+                    
+                    if redeem_response.status_code == 200:
+                        redeem_result = redeem_response.json()
+                        print(f"[DEBUG] POINTS REDEMPTION - SUCCESS: {redeem_result}")
+                        print(f"[DEBUG] POINTS REDEMPTION - Transaction should now appear in history")
+                    else:
+                        print(f"[ERROR] POINTS REDEMPTION - FAILED: {redeem_response.status_code} - {redeem_response.text}")
+                        
+                except Exception as e:
+                    print(f"[ERROR] POINTS REDEMPTION - Exception occurred: {e}")
             else:
                 print(f"[DEBUG] No points redemption requested")
             
             # For now, simulate successful payment processing
             # In a real implementation, this would call a payment service
             
-            # Add loyalty points for the transaction using local tracker
-            # 1 USD paid = 1 point (correct logic as per user requirement)
-            try:
-                fare_amount_usd = float(payment_data.get('fare', 0))
-                ticket_id = payment_data.get('ticket', '')
-                
-                print(f"[DEBUG] Adding loyalty points: {fare_amount_usd} USD = {int(fare_amount_usd)} points")
-                if loyalty_tracker.add_points(request.user.id, fare_amount_usd, ticket_id):
-                    print(f"[DEBUG] Points added successfully to local tracker")
-                else:
-                    print(f"[DEBUG] Failed to add points to local tracker")
-            except Exception as e:
-                print(f"[DEBUG] Error adding loyalty points: {e}")
+            # Note: Loyalty points are now handled by the SAGA orchestration in the backend service
+            # The SAGA pattern ensures proper transaction consistency across all services
+            print(f"[DEBUG] Loyalty points will be awarded via SAGA orchestration")
             
             # Update ticket status based on payment method
             try:
                 if payment_method == 'counter':
                     # For counter payments, set status to 'on_hold'
-                    print(f"[DEBUG] Setting ticket {ticket_ref} status to 'on_hold' for counter payment")
+                    print(f"[DEBUG] BOOKING DISPLAY FIX - Setting ticket {ticket_ref} status to 'on_hold' for counter payment")
                     status_update_result = call_backend_api(f'api/tickets/{ticket_ref}/update_status/', 'POST', {
                         'status': 'on_hold'
                     })
                     if status_update_result and status_update_result.get('success'):
-                        print(f"[DEBUG] Successfully updated ticket status to 'on_hold'")
+                        print(f"[DEBUG] BOOKING DISPLAY FIX - Successfully updated ticket status to 'on_hold'")
                     else:
-                        print(f"[DEBUG] Failed to update ticket status: {status_update_result}")
+                        print(f"[DEBUG] BOOKING DISPLAY FIX - Failed to update ticket status: {status_update_result}")
                 else:
                     # For card payments, set status to 'confirmed'
-                    print(f"[DEBUG] Setting ticket {ticket_ref} status to 'confirmed' for card payment")
+                    print(f"[DEBUG] BOOKING DISPLAY FIX - Setting ticket {ticket_ref} status to 'confirmed' for card payment")
                     status_update_result = call_backend_api(f'api/tickets/{ticket_ref}/update_status/', 'POST', {
                         'status': 'confirmed'
                     })
                     if status_update_result and status_update_result.get('success'):
-                        print(f"[DEBUG] Successfully updated ticket status to 'confirmed'")
+                        print(f"[DEBUG] BOOKING DISPLAY FIX - Successfully updated ticket status to 'confirmed'")
                     else:
-                        print(f"[DEBUG] Failed to update ticket status: {status_update_result}")
+                        print(f"[DEBUG] BOOKING DISPLAY FIX - Failed to update ticket status: {status_update_result}")
             except Exception as e:
                 print(f"[DEBUG] Error updating ticket status: {e}")
             
@@ -484,14 +515,16 @@ def bookings(request):
         if request.GET.get('payment') == 'success':
             context['success_message'] = 'Payment successful! Your booking has been confirmed.'
         
-        # Get user bookings from backend API
+        # Get user bookings from backend API (including SAGA bookings)
         print(f"[DEBUG] Fetching tickets for logged-in user ID: {request.user.id}")
-        user_tickets_data = call_backend_api(f'api/tickets/user/{request.user.id}/')
+        print(f"[DEBUG] BOOKING DISPLAY FIX - Calling new endpoint: api/tickets/user/{request.user.id}/with-saga/")
+        user_tickets_data = call_backend_api(f'api/tickets/user/{request.user.id}/with-saga/')
         if user_tickets_data:
             context['tickets'] = user_tickets_data
-            print(f"[DEBUG] Retrieved {len(user_tickets_data)} tickets for user {request.user.id}")
+            print(f"[DEBUG] BOOKING DISPLAY FIX - Retrieved {len(user_tickets_data)} tickets for user {request.user.id}")
+            print(f"[DEBUG] BOOKING DISPLAY FIX - Tickets found: {user_tickets_data}")
         else:
-            print(f"[DEBUG] No tickets found for user {request.user.id} - this might be due to user ID mismatch")
+            print(f"[DEBUG] BOOKING DISPLAY FIX - No tickets found for user {request.user.id}")
             context['message'] = 'No bookings found or unable to retrieve booking history.'
             
         return render(request, 'flight/bookings.html', context)
@@ -612,11 +645,17 @@ def aadvantage_dashboard(request):
             
         # Get transaction history from local tracker
         try:
+            print(f"[DEBUG] AADVANTAGE DASHBOARD - Requesting transaction history for user {request.user.id}")
             transaction_history = loyalty_tracker.get_user_transactions(request.user.id)
-            print(f"[DEBUG] Retrieved {len(transaction_history)} transactions from local tracker")
-            print(f"[DEBUG] Transaction history data: {transaction_history}")
+            print(f"[DEBUG] AADVANTAGE DASHBOARD - Retrieved {len(transaction_history)} transactions")
+            print(f"[DEBUG] AADVANTAGE DASHBOARD - Transaction history data: {transaction_history}")
+            
+            # Check if we have any redemption transactions
+            redemption_count = sum(1 for t in transaction_history if t.get('type') == 'miles_redemption')
+            print(f"[DEBUG] AADVANTAGE DASHBOARD - Found {redemption_count} redemption transactions")
+            
         except Exception as e:
-            print(f"[DEBUG] Transaction history error: {e}")
+            print(f"[ERROR] AADVANTAGE DASHBOARD - Transaction history error: {e}")
             transaction_history = []
             
         if not loyalty_data:

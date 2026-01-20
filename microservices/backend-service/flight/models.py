@@ -93,3 +93,113 @@ class Ticket(models.Model):
 
     def __str__(self):
         return self.ref_no
+
+
+class Seat(models.Model):
+    """Individual seat on a flight"""
+    SEAT_CLASS_CHOICES = [
+        ('economy', 'Economy'),
+        ('business', 'Business'),
+        ('first', 'First')
+    ]
+    
+    flight = models.ForeignKey(Flight, on_delete=models.CASCADE, related_name='seats')
+    seat_number = models.CharField(max_length=4)  # e.g., "12A", "5F"
+    seat_class = models.CharField(max_length=10, choices=SEAT_CLASS_CHOICES)
+    is_available = models.BooleanField(default=True)
+    
+    class Meta:
+        unique_together = ['flight', 'seat_number']
+    
+    def __str__(self):
+        return f"{self.flight.flight_number} - {self.seat_number} ({self.seat_class})"
+
+
+class SeatReservation(models.Model):
+    """SAGA seat reservation tracking"""
+    RESERVATION_STATUS_CHOICES = [
+        ('RESERVED', 'Reserved'),
+        ('CONFIRMED', 'Confirmed'),
+        ('CANCELLED', 'Cancelled'),
+        ('EXPIRED', 'Expired')
+    ]
+    
+    correlation_id = models.CharField(max_length=50, unique=True)
+    flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
+    seats = models.ManyToManyField(Seat, related_name='reservations')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    status = models.CharField(max_length=10, choices=RESERVATION_STATUS_CHOICES, default='RESERVED')
+    reserved_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()  # Reservation expiry
+    
+    def __str__(self):
+        return f"Reservation {self.correlation_id} - {self.status}"
+
+
+class SagaTransaction(models.Model):
+    """SAGA transaction tracking for complete audit trail"""
+    SAGA_STATUS_CHOICES = [
+        ('STARTED', 'Started'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('COMPLETED', 'Completed'),
+        ('FAILED', 'Failed'),
+        ('COMPENSATED', 'Compensated')
+    ]
+    
+    correlation_id = models.CharField(max_length=50, unique=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
+    booking_data = models.JSONField()  # Store original booking data
+    status = models.CharField(max_length=15, choices=SAGA_STATUS_CHOICES, default='STARTED')
+    steps_completed = models.IntegerField(default=0)
+    failed_step = models.CharField(max_length=50, blank=True, null=True)
+    error_message = models.TextField(blank=True, null=True)
+    compensation_executed = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"SAGA {self.correlation_id} - {self.status}"
+
+
+class SagaPaymentAuthorization(models.Model):
+    """SAGA payment authorization tracking"""
+    PAYMENT_STATUS_CHOICES = [
+        ('AUTHORIZED', 'Authorized'),
+        ('CANCELLED', 'Cancelled'),
+        ('EXPIRED', 'Expired')
+    ]
+    
+    correlation_id = models.CharField(max_length=50)
+    authorization_id = models.CharField(max_length=50)
+    amount = models.FloatField()
+    flight_fare = models.FloatField()
+    other_charges = models.FloatField()
+    currency = models.CharField(max_length=3, default='USD')
+    status = models.CharField(max_length=15, choices=PAYMENT_STATUS_CHOICES, default='AUTHORIZED')
+    payment_method = models.CharField(max_length=20, default='mock_card')
+    authorized_at = models.DateTimeField(auto_now_add=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"Payment {self.authorization_id} - {self.status}"
+
+
+class SagaMilesAward(models.Model):
+    """SAGA loyalty miles award tracking"""
+    AWARD_STATUS_CHOICES = [
+        ('AWARDED', 'Awarded'),
+        ('REVERSED', 'Reversed')
+    ]
+    
+    correlation_id = models.CharField(max_length=50)
+    user_id = models.CharField(max_length=20)  # Store as string to match loyalty service
+    miles_awarded = models.IntegerField()
+    original_balance = models.IntegerField()
+    new_balance = models.IntegerField()
+    status = models.CharField(max_length=15, choices=AWARD_STATUS_CHOICES, default='AWARDED')
+    awarded_at = models.DateTimeField(auto_now_add=True)
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"Miles {self.correlation_id} - {self.miles_awarded} miles - {self.status}"

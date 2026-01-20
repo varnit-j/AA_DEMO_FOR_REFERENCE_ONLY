@@ -222,11 +222,81 @@ def get_user_tickets(request, user_id):
     try:
         # Get stored tickets for the user
         user_tickets = stored_tickets.get(str(user_id), [])
-        print(f"[DEBUG] Getting tickets for user {user_id}: found {len(user_tickets)} tickets")
+        print(f"[DEBUG] BOOKING DISPLAY ISSUE - Getting tickets for user {user_id}: found {len(user_tickets)} tickets")
+        print(f"[DEBUG] BOOKING DISPLAY ISSUE - stored_tickets contents: {stored_tickets}")
+        print(f"[DEBUG] BOOKING DISPLAY ISSUE - This endpoint only reads from stored_tickets dictionary")
+        print(f"[DEBUG] BOOKING DISPLAY ISSUE - SAGA bookings are NOT stored here, they use database tables")
         return JsonResponse(user_tickets, safe=False)
         
     except Exception as e:
         print(f"[ERROR] Get user tickets exception: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_http_methods(["GET"])
+def get_user_tickets_with_saga(request, user_id):
+    """Get tickets for a specific user including SAGA bookings from database"""
+    try:
+        from .models import Ticket, SagaTransaction
+        
+        # Get stored tickets for the user (simple bookings)
+        user_tickets = stored_tickets.get(str(user_id), [])
+        print(f"[DEBUG] SAGA FIX - Simple bookings for user {user_id}: {len(user_tickets)} tickets")
+        
+        # Get SAGA bookings from database
+        try:
+            saga_tickets = Ticket.objects.filter(user_id=user_id)
+            print(f"[DEBUG] SAGA FIX - Database tickets for user {user_id}: {len(saga_tickets)} tickets")
+            
+            # Convert database tickets to the same format as simple tickets
+            for ticket in saga_tickets:
+                ticket_data = {
+                    'booking_reference': ticket.ref_no,
+                    'flight': {
+                        'id': ticket.flight.id,
+                        'plane': ticket.flight.plane,
+                        'airline': ticket.flight.airline,
+                        'flight_number': ticket.flight.flight_number,
+                        'origin': {
+                            'code': ticket.flight.origin.code,
+                            'city': ticket.flight.origin.city,
+                            'airport': ticket.flight.origin.airport
+                        },
+                        'destination': {
+                            'code': ticket.flight.destination.code,
+                            'city': ticket.flight.destination.city,
+                            'airport': ticket.flight.destination.airport
+                        },
+                        'depart_time': str(ticket.flight.depart_time),
+                        'arrival_time': str(ticket.flight.arrival_time),
+                        'economy_fare': float(ticket.flight.economy_fare),
+                        'business_fare': float(ticket.flight.business_fare),
+                        'first_fare': float(ticket.flight.first_fare),
+                    },
+                    'passengers': [
+                        {
+                            'first_name': p.first_name,
+                            'last_name': p.last_name,
+                            'gender': p.gender
+                        } for p in ticket.passengers.all()
+                    ],
+                    'contact_info': {
+                        'email': ticket.email,
+                        'mobile': ticket.mobile
+                    },
+                    'booking_date': ticket.booking_date.strftime('%Y-%m-%d'),
+                    'status': ticket.status.lower()
+                }
+                user_tickets.append(ticket_data)
+                
+        except Exception as db_error:
+            print(f"[DEBUG] SAGA FIX - Database query error: {db_error}")
+        
+        print(f"[DEBUG] SAGA FIX - Total tickets for user {user_id}: {len(user_tickets)} tickets")
+        return JsonResponse(user_tickets, safe=False)
+        
+    except Exception as e:
+        print(f"[ERROR] Get user tickets with SAGA exception: {e}")
         return JsonResponse({'error': str(e)}, status=500)
 
 

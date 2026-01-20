@@ -1,6 +1,6 @@
 {
   "1": {
-    "points_balance": 907,
+    "points_balance": 1307,
     "transactions": [
       {
         "date": "2026-01-19 15:05",
@@ -49,6 +49,22 @@
         "amount": 230.0,
         "transaction_id": "BK99C7FE0A",
         "description": "Flight booking - $230.00"
+      },
+      {
+        "date": "2026-01-19 20:32",
+        "type": "flight_booking",
+        "points_earned": 200,
+        "amount": 200.0,
+        "transaction_id": "BKAF23FF90",
+        "description": "Flight booking - $200.00"
+      },
+      {
+        "date": "2026-01-19 20:41",
+        "type": "flight_booking",
+        "points_earned": 200,
+        "amount": 200.0,
+        "transaction_id": "0ed4c226-e66b-4e09-835f-9ab54e50e7c1",
+        "description": "Flight booking - $200.00"
       }
     ]
   }
