@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views  # type: ignore
+from . import api_views
 
 # Import hybrid checkout views directly
 try:
@@ -32,6 +33,8 @@ urlpatterns = [
     path('privacy-policy', views.privacy_policy, name="privacypolicy"),
     path('terms-and-conditions', views.terms_and_conditions, name="termsandconditions"),
     path('about-us', views.about_us, name="aboutus"),
+    path('saga/test', views.saga_test, name="saga_test"),
+    path('api/create-failed-booking/', api_views.create_failed_booking, name="create_failed_booking"),
 ]
 
 # Add hybrid checkout URLs if available

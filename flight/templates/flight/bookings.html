@@ -48,6 +48,22 @@
                                     {% if ticket.status == 'CONFIRMED' %}
                                         <div class="green">{{ticket.status}}</div>
                                     {% endif %}
+                                    {% if ticket.status == 'FAILED' %}
+                                        <div class="red">{{ticket.status}}</div>
+                                        <div class="row booking-date-div" style="font-size: .7em; color: #666;">
+                                            Failed on: {{ticket.booking_date | date:"D, M d Y"}}
+                                        </div>
+                                        {% if ticket.failed_step %}
+                                            <div class="row booking-date-div" style="font-size: .6em; color: #999;">
+                                                Failed at: {{ticket.failed_step}}
+                                            </div>
+                                        {% endif %}
+                                        {% if ticket.compensation_executed %}
+                                            <div class="row booking-date-div" style="font-size: .6em; color: #28a745;">
+                                                ✓ Compensation processed
+                                            </div>
+                                        {% endif %}
+                                    {% endif %}
                                     {% if ticket.status == 'PENDING' %}
                                         <div class="orange">{{ticket.status}}</div>
                                     {% endif %}
@@ -69,6 +85,9 @@
                                         On hold since: {{ticket.booking_date | date:"D, M d Y"}}
                                     {% endif %}
                                     {% if ticket.status == 'CANCELLED' %}
+                                    {% endif %}
+                                    {% if ticket.status == 'FAILED' %}
+                                        <div class="red">{{ticket.status}}</div>
                                     {% endif %}
                                 </div>
                             </div>
@@ -110,6 +129,22 @@
                                         <button type="button" class="btn btn-outline-danger btnp cbtn" data-ref="{{ticket.ref_no}}" onclick="popup(this)">Cancel</button>
                                     {% endif %}
                                     {% if ticket.status == 'CANCELLED' %}
+                                    {% endif %}
+                                    {% if ticket.status == 'FAILED' %}
+                                        <div class="alert alert-danger" style="font-size: 0.8em; margin-bottom: 5px; padding: 5px;">
+                                            <strong>Booking Failed</strong><br>
+                                            {% if ticket.failure_reason %}
+                                                {{ticket.failure_reason|truncatechars:80}}
+                                            {% else %}
+                                                Transaction could not be completed
+                                            {% endif %}
+                                        </div>
+                                        {% if ticket.compensation_executed %}
+                                            <div class="alert alert-success" style="font-size: 0.7em; margin-bottom: 5px; padding: 3px;">
+                                                <strong>✓ No charges applied</strong><br>
+                                                All payments and loyalty points reversed
+                                            </div>
+                                        {% endif %}
                                     {% endif %}
                                 </div>
                             </div>

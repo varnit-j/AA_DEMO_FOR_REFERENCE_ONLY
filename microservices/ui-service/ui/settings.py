@@ -75,8 +75,8 @@ STATICFILES_DIRS = [
 
 # Service URLs
 BACKEND_SERVICE_URL = os.getenv('BACKEND_SERVICE_URL', 'http://localhost:8001')
-PAYMENT_SERVICE_URL = os.getenv('PAYMENT_SERVICE_URL', 'http://localhost:8003')
-LOYALTY_SERVICE_URL = os.getenv('LOYALTY_SERVICE_URL', 'http://localhost:8002')
+PAYMENT_SERVICE_URL = os.getenv('PAYMENT_SERVICE_URL', 'http://localhost:8002')
+LOYALTY_SERVICE_URL = os.getenv('LOYALTY_SERVICE_URL', 'http://localhost:8003')
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

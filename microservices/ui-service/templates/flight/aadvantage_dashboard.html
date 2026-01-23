@@ -169,7 +169,13 @@
                             <tbody>
                                 {% for transaction in transaction_history %}
                                 <tr>
-                                    <td>{{ transaction.date }}</td>
+                                    <td>
+                                        {% if transaction.date_local %}
+                                            {{ transaction.date_local }}
+                                        {% else %}
+                                            {{ transaction.date }}
+                                        {% endif %}
+                                    </td>
                                     <td>{{ transaction.transaction_id }}</td>
                                     <td>
                                         {% if transaction.amount %}
@@ -194,6 +200,12 @@
                                             <span class="badge badge-success">{{ transaction.type|title }}</span>
                                         {% elif transaction.type == 'miles_redemption' %}
                                             <span class="badge badge-warning">{{ transaction.type|title }}</span>
+                                        {% elif transaction.type == 'adjustment' %}
+                                            {% if 'compensation' in transaction.description|lower or 'comp-' in transaction.transaction_id|lower %}
+                                                <span class="badge badge-danger">🔄 Compensation</span>
+                                            {% else %}
+                                                <span class="badge badge-info">{{ transaction.type|title }}</span>
+                                            {% endif %}
                                         {% else %}
                                             <span class="badge badge-primary">{{ transaction.type|title }}</span>
                                         {% endif %}

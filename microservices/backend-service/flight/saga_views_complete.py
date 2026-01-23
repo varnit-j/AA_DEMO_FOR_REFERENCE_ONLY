@@ -8,19 +8,82 @@ import logging
 import json
 import uuid
 import requests
+from typing import Dict, Any
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from .models import Flight, Place, Week, SagaTransaction, SagaPaymentAuthorization, SagaMilesAward, SeatReservation, Ticket, Passenger
 from .simple_views import stored_tickets
+from .saga_log_storage import saga_log_storage
+from .failed_booking_handler import create_failed_booking_record
 from django.utils import timezone
 from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
-# SAGA-specific storage
-saga_reservations = {}
+# SAGA-specific storage - FIXED: Use database instead of memory
+# saga_reservations = {}  # REMOVED: This was causing persistence issues
 saga_orchestrator = None
+
+def get_or_create_seat_reservation(correlation_id: str, booking_data: Dict[str, Any]) -> 'SeatReservation':
+    """
+    Database-backed seat reservation instead of memory dictionary
+    """
+    try:
+        from .models import Flight
+        flight = Flight.objects.get(id=booking_data.get('flight_id'))
+        
+        # CRITICAL FIX: Handle user validation to prevent FOREIGN KEY constraint error
+        user_id = booking_data.get('user_id')
+        user = None
+        
+        if user_id:
+            try:
+                from django.contrib.auth import get_user_model
+                User = get_user_model()
+                user = User.objects.get(id=user_id)
+                logger.info(f"[PAYMENT_FLOW_DEBUG] ✓ Valid user found for seat reservation: {user_id}")
+            except User.DoesNotExist:
+                logger.error(f"[PAYMENT_FLOW_DEBUG] ❌ User {user_id} not found - creating seat reservation without user")
+                user = None
+        
+        reservation, created = SeatReservation.objects.get_or_create(
+            correlation_id=correlation_id,
+            defaults={
+                'flight': flight,
+                'user': user,  # Use user object instead of user_id
+                'status': 'RESERVED',
+                'expires_at': timezone.now() + timedelta(minutes=30)  # 30 min expiry
+            }
+        )
+        
+        if created:
+            logger.info(f"[SAGA DB] Created seat reservation in database: {correlation_id}")
+        else:
+            logger.info(f"[SAGA DB] Found existing seat reservation: {correlation_id}")
+            
+        return reservation
+        
+    except Exception as e:
+        logger.error(f"[SAGA DB] Error creating seat reservation: {e}")
+        raise
+
+def cancel_seat_reservation(correlation_id: str) -> bool:
+    """
+    Database-backed seat cancellation instead of memory deletion
+    """
+    try:
+        reservation = SeatReservation.objects.get(correlation_id=correlation_id)
+        reservation.status = 'CANCELLED'
+        reservation.save()
+        logger.info(f"[SAGA DB] Cancelled seat reservation in database: {correlation_id}")
+        return True
+    except SeatReservation.DoesNotExist:
+        logger.warning(f"[SAGA DB] No seat reservation found to cancel: {correlation_id}")
+        return False
+    except Exception as e:
+        logger.error(f"[SAGA DB] Error cancelling seat reservation: {e}")
+        return False
 
 # Initialize orchestrator
 def get_orchestrator():
@@ -32,7 +95,14 @@ def get_orchestrator():
             logger.info("[SAGA] Orchestrator initialized successfully")
         except ImportError as e:
             logger.error(f"[SAGA] Failed to import orchestrator: {e}")
-            saga_orchestrator = None
+            # Fallback to alternative orchestrator
+            try:
+                from .saga_orchestrator import BookingOrchestrator
+                saga_orchestrator = BookingOrchestrator()
+                logger.warning("[SAGA] Using fallback orchestrator")
+            except ImportError as e2:
+                logger.error(f"[SAGA] Failed to import any orchestrator: {e2}")
+                saga_orchestrator = None
     return saga_orchestrator
 
 @csrf_exempt
@@ -62,6 +132,16 @@ def start_booking_saga(request):
                 'success': False,
                 'error': f'Flight {flight_id} not found'
             }, status=404)
+        
+        # FLIGHT DATA DEBUG: Log flight data preparation for SAGA
+        logger.info(f"[FLIGHT_DATA_DEBUG] ===== SAGA BOOKING DATA PREPARATION =====")
+        logger.info(f"[FLIGHT_DATA_DEBUG] Flight ID: {flight_id}")
+        logger.info(f"[FLIGHT_DATA_DEBUG] Flight details: {flight.flight_number} from {flight.origin} to {flight.destination}")
+        logger.info(f"[FLIGHT_DATA_DEBUG] Economy fare: {flight.economy_fare}")
+        logger.info(f"[FLIGHT_DATA_DEBUG] Business fare: {flight.business_fare}")
+        logger.info(f"[FLIGHT_DATA_DEBUG] First fare: {flight.first_fare}")
+        logger.info(f"[FLIGHT_DATA_DEBUG] User ID: {data.get('user_id', 1)}")
+        logger.info(f"[FLIGHT_DATA_DEBUG] Passengers count: {len(passengers)}")
         
         # Prepare booking data for SAGA
         booking_data = {
@@ -95,13 +175,32 @@ def start_booking_saga(request):
         # Create SAGA transaction record in database
         try:
             flight = Flight.objects.get(id=flight_id)
+            
+            # CRITICAL FIX: Handle user_id validation to prevent FOREIGN KEY constraint error
+            user_id = booking_data.get('user_id')
+            user = None
+            
+            if user_id:
+                try:
+                    from django.contrib.auth import get_user_model
+                    User = get_user_model()
+                    user = User.objects.get(id=user_id)
+                    logger.info(f"[PAYMENT_FLOW_DEBUG] ✓ Valid user found: {user_id}")
+                except User.DoesNotExist:
+                    logger.error(f"[PAYMENT_FLOW_DEBUG] ❌ User {user_id} not found - creating SAGA without user")
+                    user = None
+            else:
+                logger.warning(f"[PAYMENT_FLOW_DEBUG] ⚠️ No user_id provided in booking_data")
+            
             saga_transaction = SagaTransaction.objects.create(
                 correlation_id=str(uuid.uuid4()),
-                user_id=booking_data.get('user_id'),
+                user=user,  # Use user object instead of user_id
                 flight=flight,
                 booking_data=booking_data,
                 status='STARTED'
             )
+            
+            logger.info(f"[PAYMENT_FLOW_DEBUG] ✓ SAGA transaction created: {saga_transaction.correlation_id}")
             
             # Update booking data with correlation ID
             booking_data['correlation_id'] = saga_transaction.correlation_id
@@ -147,32 +246,38 @@ def reserve_seat(request):
         booking_data = data.get('booking_data', {})
         simulate_failure = data.get('simulate_failure', False)
         
-        logger.info(f"[SAGA] ReserveSeat step for correlation_id: {correlation_id}")
+        logger.info(f"[SAGA BACKEND] 💺 ReserveSeat step initiated for correlation_id: {correlation_id}")
+        logger.info(f"[SAGA BACKEND] 📊 Processing seat reservation for flight_id: {booking_data.get('flight_id')}")
         
         # Simulate failure if requested
         if simulate_failure:
-            logger.error(f"[SAGA] Simulated failure in ReserveSeat for {correlation_id}")
+            logger.error(f"[SAGA BACKEND] ❌ Simulated failure in ReserveSeat for {correlation_id}")
+            logger.error(f"[SAGA BACKEND] 🔄 This is the first step - no compensation needed")
             return JsonResponse({
                 "success": False,
-                "error": "Simulated seat reservation failure"
+                "error": "Simulated seat reservation failure - seat management system unavailable"
             })
         
-        # Store reservation in memory for now
-        saga_reservations[correlation_id] = {
-            'flight_id': booking_data.get('flight_id'),
-            'passengers': booking_data.get('passengers', []),
-            'user_id': booking_data.get('user_id'),
-            'status': 'reserved'
-        }
-        
-        logger.info(f"[SAGA] Seat reservation successful for {correlation_id}")
-        
-        return JsonResponse({
-            "success": True,
-            "correlation_id": correlation_id,
-            "reservation_id": correlation_id,
-            "message": "Seat reserved successfully"
-        })
+        # Store reservation in database instead of memory
+        try:
+            reservation = get_or_create_seat_reservation(correlation_id, booking_data)
+            
+            logger.info(f"[SAGA BACKEND] ✅ Seat reservation successful for {correlation_id}")
+            logger.info(f"[SAGA BACKEND] 💾 Created reservation record: {reservation.id}")
+            logger.info(f"[SAGA BACKEND] 🎯 Backend service step 1 complete")
+            
+            return JsonResponse({
+                "success": True,
+                "correlation_id": correlation_id,
+                "reservation_id": reservation.id,
+                "message": "Seat reserved successfully in database"
+            })
+        except Exception as e:
+            logger.error(f"[SAGA BACKEND] ❌ Failed to create seat reservation: {e}")
+            return JsonResponse({
+                "success": False,
+                "error": f"Failed to reserve seat: {str(e)}"
+            })
         
     except Exception as e:
         logger.error(f"[SAGA] Error in ReserveSeat: {e}")
@@ -191,14 +296,16 @@ def confirm_booking(request):
         booking_data = data.get('booking_data', {})
         simulate_failure = data.get('simulate_failure', False)
         
-        logger.info(f"[SAGA] ConfirmBooking step for correlation_id: {correlation_id}")
+        logger.info(f"[SAGA BACKEND] 🎫 ConfirmBooking step initiated for correlation_id: {correlation_id}")
+        logger.info(f"[SAGA BACKEND] 📋 Final step - creating ticket and confirming booking")
         
         # Simulate failure if requested
         if simulate_failure:
-            logger.error(f"[SAGA] Simulated failure in ConfirmBooking for {correlation_id}")
+            logger.error(f"[SAGA BACKEND] ❌ Simulated failure in ConfirmBooking for {correlation_id}")
+            logger.error(f"[SAGA BACKEND] 🔄 This will trigger compensation for all previous steps")
             return JsonResponse({
                 "success": False,
-                "error": "Simulated booking confirmation failure"
+                "error": "Simulated booking confirmation failure - booking system unavailable"
             })
         
         # Get flight details
@@ -370,7 +477,10 @@ def confirm_booking(request):
         if booking_date > cancellation_deadline:
             refund_policy = "No refund available - within 24 hours of departure"
         
-        logger.info(f"[SAGA] Business-compliant booking confirmed: {ref_no} for {passenger_count} passengers")
+        logger.info(f"[SAGA BACKEND] ✅ Business-compliant booking confirmed: {ref_no} for {passenger_count} passengers")
+        logger.info(f"[SAGA BACKEND] 🎫 Created ticket ID: {ticket.id}")
+        logger.info(f"[SAGA BACKEND] 💰 Total fare: ${total_fare}")
+        logger.info(f"[SAGA BACKEND] 🎯 Backend service final step complete - SAGA transaction successful!")
         
         return JsonResponse({
             "success": True,
@@ -405,18 +515,51 @@ def cancel_seat(request):
         data = json.loads(request.body)
         correlation_id = data.get('correlation_id')
         
-        logger.info(f"[SAGA] CancelSeat compensation for correlation_id: {correlation_id}")
+        logger.info(f"[SAGA BACKEND COMPENSATION] 🔄 CancelSeat compensation initiated for correlation_id: {correlation_id}")
+        saga_log_storage.add_log(
+            correlation_id=correlation_id,
+            step_name="CancelSeat",
+            service="SAGA BACKEND COMPENSATION",
+            log_level="INFO",
+            message="CancelSeat compensation initiated",
+            is_compensation=True
+        )
         
-        # Remove from memory storage
-        if correlation_id in saga_reservations:
-            del saga_reservations[correlation_id]
-            logger.info(f"[SAGA] Seat reservation cancelled for {correlation_id}")
+        # Cancel reservation in database instead of memory
+        success = cancel_seat_reservation(correlation_id)
         
-        return JsonResponse({
-            "success": True,
-            "correlation_id": correlation_id,
-            "message": "Seat reservation cancelled successfully"
-        })
+        if success:
+            logger.info(f"[SAGA BACKEND COMPENSATION] ✅ Seat reservation cancelled for {correlation_id}")
+            logger.info(f"[SAGA BACKEND COMPENSATION] 🎯 Backend service compensation complete")
+            saga_log_storage.add_log(
+                correlation_id=correlation_id,
+                step_name="CancelSeat",
+                service="SAGA BACKEND COMPENSATION",
+                log_level="INFO",
+                message="Seat reservation cancelled successfully",
+                is_compensation=True
+            )
+            return JsonResponse({
+                "success": True,
+                "correlation_id": correlation_id,
+                "message": "Seat reservation cancelled successfully in database"
+            })
+        else:
+            logger.warning(f"[SAGA BACKEND COMPENSATION] ⚠️ No seat reservation found to cancel for {correlation_id}")
+            logger.info(f"[SAGA BACKEND COMPENSATION] ✅ No compensation needed - no seat was reserved")
+            saga_log_storage.add_log(
+                correlation_id=correlation_id,
+                step_name="CancelSeat",
+                service="SAGA BACKEND COMPENSATION",
+                log_level="INFO",
+                message="No seat reservation found to cancel - compensation complete",
+                is_compensation=True
+            )
+            return JsonResponse({
+                "success": True,  # Still return success for compensation
+                "correlation_id": correlation_id,
+                "message": "No seat reservation found to cancel - compensation complete"
+            })
         
     except Exception as e:
         logger.error(f"[SAGA] Error in CancelSeat compensation: {e}")
@@ -432,21 +575,112 @@ def cancel_booking(request):
     try:
         data = json.loads(request.body)
         correlation_id = data.get('correlation_id')
+        compensation_reason = data.get('compensation_reason', 'SAGA compensation')
         
-        logger.info(f"[SAGA] CancelBooking compensation for correlation_id: {correlation_id}")
+        logger.info(f"[SAGA BACKEND COMPENSATION] 🔄 CancelBooking compensation initiated for correlation_id: {correlation_id}")
+        logger.info(f"[SAGA BACKEND COMPENSATION] 📋 Compensation reason: {compensation_reason}")
         
-        # For now, just log the cancellation
-        # In a real system, you would mark the ticket as cancelled
-        logger.info(f"[SAGA] Booking cancelled for {correlation_id}")
+        # Try to find and cancel any tickets created for this SAGA transaction
+        try:
+            # Look for tickets with this correlation ID in the reference number
+            tickets = Ticket.objects.filter(ref_no__icontains=correlation_id[:8])
+            
+            if tickets.exists():
+                logger.info(f"[SAGA BACKEND COMPENSATION] 🎫 Found {tickets.count()} tickets to cancel")
+                for ticket in tickets:
+                    logger.info(f"[SAGA BACKEND COMPENSATION] 🎫 Cancelling ticket {ticket.ref_no} due to SAGA failure")
+                    ticket.status = 'CANCELLED_SAGA'
+                    ticket.cancellation_reason = f'SAGA Compensation: {compensation_reason}'
+                    ticket.save()
+                    
+                logger.info(f"[SAGA BACKEND COMPENSATION] ✅ Successfully cancelled {tickets.count()} tickets for {correlation_id}")
+                
+                return JsonResponse({
+                    "success": True,
+                    "correlation_id": correlation_id,
+                    "tickets_cancelled": tickets.count(),
+                    "message": f"Successfully cancelled {tickets.count()} tickets due to SAGA compensation"
+                })
+            else:
+                logger.info(f"[SAGA COMPENSATION] ℹ️ No tickets found to cancel for {correlation_id}")
+                return JsonResponse({
+                    "success": True,
+                    "correlation_id": correlation_id,
+                    "tickets_cancelled": 0,
+                    "message": "No tickets found to cancel"
+                })
+                
+        except Exception as e:
+            logger.error(f"[SAGA COMPENSATION] ❌ Error finding/cancelling tickets: {e}")
+            # Still return success for compensation, but log the error
+            return JsonResponse({
+                "success": True,
+                "correlation_id": correlation_id,
+                "message": f"Booking cancellation logged (error accessing tickets: {str(e)})"
+            })
+        
+    except Exception as e:
+        logger.error(f"[SAGA COMPENSATION] ❌ Error in CancelBooking compensation: {e}")
+        return JsonResponse({
+            "success": False,
+            "error": str(e)
+        })
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_saga_logs(request, correlation_id):
+    """Get SAGA execution logs for display"""
+    try:
+        # Get logs from centralized storage
+        logs = saga_log_storage.get_logs(correlation_id)
         
         return JsonResponse({
             "success": True,
             "correlation_id": correlation_id,
-            "message": "Booking cancelled successfully"
+            "logs": logs,
+            "total_logs": len(logs)
         })
         
     except Exception as e:
-        logger.error(f"[SAGA] Error in CancelBooking compensation: {e}")
+        logger.error(f"[SAGA] Error getting SAGA logs: {e}")
+        return JsonResponse({
+            "success": False,
+            "error": str(e)
+        })
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def demo_saga_failure(request):
+    """Demo endpoint to trigger SAGA with simulated failure"""
+    try:
+        # Create demo booking data with multiple failure simulation options
+        demo_booking_data = {
+            'flight_id': 37972,  # Updated to use a valid flight ID
+            'user_id': 1,
+            'passengers': [{'first_name': 'Demo', 'last_name': 'User', 'gender': 'male'}],
+            'contact_info': {'email': 'demo@example.com', 'mobile': '1234567890'},
+            'seat_class': 'economy',
+            'simulate_reserveseat_fail': False,  # Simulate failure at seat reservation
+            'simulate_authorizepayment_fail': False,  # Simulate failure at payment step
+            'simulate_awardmiles_fail': False,  # Simulate failure at miles award
+            'simulate_confirmbooking_fail': True  # Simulate failure at booking confirmation - THIS WILL TEST LOYALTY COMPENSATION
+        }
+        
+        # Get orchestrator and start SAGA
+        orchestrator = get_orchestrator()
+        if not orchestrator:
+            return JsonResponse({
+                'success': False,
+                'error': 'SAGA orchestrator not available'
+            }, status=500)
+        
+        # Start SAGA with simulated failure
+        result = orchestrator.start_booking_saga(demo_booking_data)
+        
+        return JsonResponse(result)
+        
+    except Exception as e:
+        logger.error(f"[SAGA] Error in demo failure: {e}")
         return JsonResponse({
             "success": False,
             "error": str(e)

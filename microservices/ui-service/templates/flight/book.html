@@ -7,15 +7,67 @@
     <title>Book | Flight</title>
     <link rel="stylesheet" href="{% static 'css/book_style.css' %}">
     <script type="text/javascript" src="{% static 'js/book.js' %}"></script>
+    <script type="text/javascript" src="{% static 'js/saga_demo.js' %}"></script>
 {% endblock %}
 
 {% block body %}
     <section class="section section1">
+        <!-- ERROR DISPLAY SECTION -->
+        {% if error %}
+            <div style="margin: 20px; padding: 20px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 5px; color: #721c24;">
+                <h4 style="margin-top: 0; color: #721c24;">
+                    {% if error_type == 'connection' %}
+                        🔌 Connection Error
+                    {% elif error_type == 'backend_unavailable' %}
+                        🚨 Backend Service Unavailable
+                    {% elif error_type == 'missing_flight_id' %}
+                        ⚠️ Missing Flight Information
+                    {% elif error_type == 'flight_data' %}
+                        📋 Flight Data Error
+                    {% elif error_type == 'saga_error' %}
+                        ❌ SAGA Transaction Error
+                    {% else %}
+                        ⚠️ Error
+                    {% endif %}
+                </h4>
+                <p style="margin-bottom: 10px;">{{ error }}</p>
+                {% if error_type == 'connection' or error_type == 'backend_unavailable' %}
+                    <small>
+                        <strong>Troubleshooting:</strong>
+                        <ul>
+                            <li>Check if backend service is running on port 8001</li>
+                            <li>Verify network connectivity</li>
+                            <li>Refresh the page and try again</li>
+                        </ul>
+                    </small>
+                {% elif error_type == 'missing_flight_id' %}
+                    <small>
+                        <strong>Action:</strong> Please go back to flight search and select a flight again.
+                    </small>
+                {% elif error_type == 'saga_error' %}
+                    <small>
+                        <strong>What happened:</strong> The SAGA transaction failed at one or more steps and was automatically compensated.
+                        <br><strong>Next Steps:</strong> Please review the error message above and try your booking again.
+                    </small>
+                {% endif %}
+            </div>
+        {% endif %}
+        
         <form action="{% url 'book' %}" onsubmit="return book_submit()" method="POST">
             {% csrf_token %}
-            <input type="hidden" name="flight1" value="{{flight1.id}}">
-            <input type="hidden" name="flight1Date" value='{{flight1ddate | date:"d-m-Y"}}'>
-            <input type="hidden" name="flight1Class" value="{{seat}}">
+            <!-- SAGA Demo Mode Flag - Only set to true when failure simulation is enabled -->
+            <input type="hidden" name="saga_demo_mode" value="false" id="sagaDemoMode">
+            {% if flight1 %}
+                <input type="hidden" name="flight1" value="{{flight1.id}}">
+                <input type="hidden" name="flight1Date" value='{{flight1ddate | date:"d-m-Y"}}'>
+                <input type="hidden" name="flight1Class" value="{{seat}}">
+            {% else %}
+                <!-- DEBUG: No flight1 data available -->
+                <div style="color: red; font-weight: bold; padding: 15px; background: #ffe0e0; border-radius: 5px; margin: 15px 0;">
+                    ❌ ERROR: No flight data available. SAGA toggles will not work.
+                    <br><small>This happens when the backend service is unreachable or flight ID is invalid.</small>
+                </div>
+            {% endif %}
             {% if flight2 %}
                 <input type="hidden" name="flight2" value="{{flight2.id}}">
                 <input type="hidden" name="flight2Class" value="{{seat}}">
@@ -517,6 +569,86 @@
                                 </center>
                             </div>
                         </div>
+                    </div>
+                    
+                    <!-- SAGA Failure Simulation Section -->
+                    <div class="saga-demo-section" style="margin-top: 20px !important; padding: 15px !important; background-color: #fff3cd !important; border: 2px solid #ffeaa7 !important; border-radius: 8px !important; display: block !important; visibility: visible !important; z-index: 1000 !important;">
+                        <h5 style="color: #856404 !important; margin-bottom: 15px !important; background: none !important; -webkit-text-fill-color: #856404 !important;">🔧 SAGA Demo Controls</h5>
+                        <p style="font-size: 12px !important; color: #856404 !important; margin-bottom: 15px !important;">
+                            Toggle switches to simulate transaction failures and demonstrate SAGA compensation
+                        </p>
+                        <hr style="border-color: #ffeaa7 !important;">
+                        
+                        <!-- DEBUG INFO -->
+                        <div style="background: #f8f9fa; padding: 5px; margin-bottom: 10px; font-size: 10px; color: #666;">
+                            DEBUG: SAGA section loaded. Flight1: {% if flight1 %}✓ {{flight1.airline}}{% else %}✗ Missing{% endif %}
+                        </div>
+                        
+                        <!-- Reserve Seat Failure -->
+                        <div class="form-check" style="margin-bottom: 10px;">
+                            <input class="form-check-input" type="checkbox" name="simulate_reserveseat_fail" id="simulateReserveSeatFail">
+                            <label class="form-check-label" for="simulateReserveSeatFail" style="font-size: 13px; color: #856404;">
+                                <strong>Simulate Seat Reservation Failure</strong>
+                                <br><small>Fails at step 1 - no compensation needed</small>
+                            </label>
+                        </div>
+                        
+                        <!-- Payment Authorization Failure -->
+                        <div class="form-check" style="margin-bottom: 10px;">
+                            <input class="form-check-input" type="checkbox" name="simulate_authorizepayment_fail" id="simulatePaymentFail">
+                            <label class="form-check-label" for="simulatePaymentFail" style="font-size: 13px; color: #856404;">
+                                <strong>Simulate Payment Authorization Failure</strong>
+                                <br><small>Fails at step 2 - compensates seat reservation</small>
+                            </label>
+                        </div>
+                        
+                        <!-- Miles Award Failure -->
+                        <div class="form-check" style="margin-bottom: 10px;">
+                            <input class="form-check-input" type="checkbox" name="simulate_awardmiles_fail" id="simulateMilesFail">
+                            <label class="form-check-label" for="simulateMilesFail" style="font-size: 13px; color: #856404;">
+                                <strong>Simulate Miles Award Failure</strong>
+                                <br><small>Fails at step 3 - compensates payment & seat</small>
+                            </label>
+                        </div>
+                        
+                        <!-- Booking Confirmation Failure -->
+                        <div class="form-check" style="margin-bottom: 15px;">
+                            <input class="form-check-input" type="checkbox" name="simulate_confirmbooking_fail" id="simulateBookingFail">
+                            <label class="form-check-label" for="simulateBookingFail" style="font-size: 13px; color: #856404;">
+                                <strong>Simulate Booking Confirmation Failure</strong>
+                                <br><small>Fails at step 4 - compensates all previous steps</small>
+                            </label>
+                        </div>
+                        
+                        <div style="font-size: 11px; color: #856404; font-style: italic;">
+                            💡 Select one failure type to see SAGA compensation in action
+                        </div>
+                        
+                        <!-- JavaScript to handle SAGA demo mode -->
+                        <script>
+                            function updateSagaDemoMode() {
+                                const checkboxes = document.querySelectorAll('input[name^="simulate_"]');
+                                const sagaDemoInput = document.getElementById('sagaDemoMode');
+                                let anyChecked = false;
+                                
+                                checkboxes.forEach(checkbox => {
+                                    if (checkbox.checked) {
+                                        anyChecked = true;
+                                    }
+                                });
+                                
+                                sagaDemoInput.value = anyChecked ? 'true' : 'false';
+                                console.log('[DEBUG] SAGA Demo Mode set to:', sagaDemoInput.value);
+                            }
+                            
+                            // Add event listeners to all SAGA failure checkboxes
+                            document.addEventListener('DOMContentLoaded', function() {
+                                const checkboxes = document.querySelectorAll('input[name^="simulate_"]');
+                                checkboxes.forEach(checkbox => {
+                                    checkbox.addEventListener('change', updateSagaDemoMode);
+                                });
+                            });
+                        </script>
                     </div>
                 </div>
                 <div class="col media-payment-btn">

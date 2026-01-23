@@ -28,7 +28,7 @@ def test_saga_booking():
     }
     
     try:
-        print("1. Testing SAGA booking endpoint...")
+        print("[INFO] Testing SAGA booking endpoint...")
         response = requests.post(
             'http://localhost:8001/api/saga/start-booking/',
             json=test_data,
@@ -36,7 +36,7 @@ def test_saga_booking():
             timeout=30
         )
         
-        print(f"Response Status: {response.status_code}")
+        print(f"[INFO] Response Status: {response.status_code}")
         
         if response.status_code == 200:
             result = response.json()
@@ -44,12 +44,12 @@ def test_saga_booking():
             print(json.dumps(result, indent=2))
             
             if result.get('success'):
-                print("✅ SUCCESS: SAGA booking completed successfully!")
+                print("[OK] SUCCESS: SAGA booking completed successfully!")
                 
                 # Check if correlation_id exists
                 correlation_id = result.get('correlation_id')
                 if correlation_id:
-                    print(f"✅ Correlation ID: {correlation_id}")
+                    print(f"[OK] Correlation ID: {correlation_id}")
                     
                     # Test SAGA status endpoint
                     print("\n2. Testing SAGA status endpoint...")
@@ -62,22 +62,22 @@ def test_saga_booking():
                         status_result = status_response.json()
                         print("SAGA Status:")
                         print(json.dumps(status_result, indent=2))
-                        print("✅ SAGA status endpoint working!")
+                        print("[OK] SAGA status endpoint working!")
                     else:
-                        print(f"❌ SAGA status endpoint failed: {status_response.status_code}")
+                        print(f"[ERROR] SAGA status endpoint failed: {status_response.status_code}")
                         
                 else:
-                    print("❌ No correlation_id in response")
+                    print("[ERROR] No correlation_id in response")
                     
             else:
-                print(f"❌ SAGA booking failed: {result.get('error')}")
+                print(f"[ERROR] SAGA booking failed: {result.get('error')}")
                 
         else:
-            print(f"❌ HTTP Error: {response.status_code}")
+            print(f"[ERROR] HTTP Error: {response.status_code}")
             print(f"Response: {response.text}")
             
     except Exception as e:
-        print(f"❌ Test failed with exception: {e}")
+        print(f"[ERROR] Test failed with exception: {e}")
 
 def test_individual_endpoints():
     """Test individual SAGA endpoints"""
@@ -102,7 +102,7 @@ def test_individual_endpoints():
     
     for name, url in endpoints:
         try:
-            print(f"\nTesting {name}...")
+            print(f"\n[INFO] Testing {name}...")
             response = requests.post(
                 url,
                 json=test_data,
@@ -113,14 +113,14 @@ def test_individual_endpoints():
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success'):
-                    print(f"✅ {name} endpoint working!")
+                    print(f"[OK] {name} endpoint working!")
                 else:
-                    print(f"❌ {name} failed: {result.get('error')}")
+                    print(f"[ERROR] {name} failed: {result.get('error')}")
             else:
-                print(f"❌ {name} HTTP error: {response.status_code}")
+                print(f"[ERROR] {name} HTTP error: {response.status_code}")
                 
         except Exception as e:
-            print(f"❌ {name} exception: {e}")
+            print(f"[ERROR] {name} exception: {e}")
 
 if __name__ == "__main__":
     test_saga_booking()

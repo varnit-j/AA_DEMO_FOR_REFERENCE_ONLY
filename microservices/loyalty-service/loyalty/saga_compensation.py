@@ -50,7 +50,7 @@ def reverse_miles(request):
         account.points_balance -= miles_to_reverse
         account.save()  # This will also update the tier
         
-        # Create compensation transaction record
+        # Create compensation transaction record with enhanced identification
         LoyaltyTransaction.objects.create(
             account=account,
             transaction_id=f"COMP-{correlation_id[:8]}",

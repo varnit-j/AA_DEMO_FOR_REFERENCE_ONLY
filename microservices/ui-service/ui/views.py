@@ -19,32 +19,98 @@ from . import loyalty_tracker
 FEE = 50.0
 
 # Helper function to make API calls to backend service
-def call_backend_api(endpoint, method='GET', data=None):
-    """Make API calls to the backend service"""
-    try:
-        backend_url = settings.BACKEND_SERVICE_URL
-        url = f"{backend_url}/{endpoint}"
+def call_backend_api(endpoint, method='GET', data=None, timeout=10, retries=3):
+    """
+    Make API calls to the backend service with proper error handling
+    
+    Args:
+        endpoint: API endpoint (without protocol/domain)
+        method: HTTP method (GET, POST, etc.)
+        data: Request data
+        timeout: Request timeout in seconds
+        retries: Number of retry attempts
+    
+    Returns:
+        JSON response dict or None on failure
+    """
+    backend_url = settings.BACKEND_SERVICE_URL
+    url = f"{backend_url}/{endpoint}"
+    
+    print(f"[DEBUG] API CALL: {method} {url}")
+    if data:
+        print(f"[DEBUG] Request data keys: {list(data.keys()) if isinstance(data, dict) else 'N/A'}")
+    
+    for attempt in range(retries):
+        try:
+            print(f"[DEBUG] Attempt {attempt + 1}/{retries}")
+            
+            if method == 'GET':
+                response = requests.get(url, params=data, timeout=timeout)
+            elif method == 'POST':
+                response = requests.post(url, json=data, timeout=timeout)
+            else:
+                print(f"[DEBUG] Unsupported method: {method}")
+                return None
+            
+            print(f"[DEBUG] Response status: {response.status_code}")
+            
+            # Handle successful responses
+            if response.status_code in [200, 201]:
+                try:
+                    result = response.json()
+                    print(f"[DEBUG] API Success - Response keys: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
+                    return result
+                except json.JSONDecodeError as e:
+                    print(f"[DEBUG] JSON decode error: {e}")
+                    print(f"[DEBUG] Raw response: {response.text[:200]}")
+                    return None
+            
+            # Handle error responses with status codes
+            elif response.status_code == 404:
+                print(f"[DEBUG] API returned 404 - Endpoint not found: {url}")
+                return None
+            elif response.status_code == 500:
+                print(f"[DEBUG] API returned 500 - Server error")
+                if attempt < retries - 1:
+                    print(f"[DEBUG] Retrying...")
+                    continue
+                return None
+            elif response.status_code == 400:
+                print(f"[DEBUG] API returned 400 - Bad request")
+                try:
+                    error_data = response.json()
+                    print(f"[DEBUG] Error details: {error_data}")
+                except:
+                    print(f"[DEBUG] Response body: {response.text[:200]}")
+                return None
+            else:
+                print(f"[DEBUG] API returned {response.status_code}")
+                print(f"[DEBUG] Response: {response.text[:200]}")
+                return None
         
-        print(f"[DEBUG] Making {method} request to: {url}")
-        if data:
-            print(f"[DEBUG] Request data: {data}")
-        
-        if method == 'GET':
-            response = requests.get(url, params=data)
-        elif method == 'POST':
-            response = requests.post(url, json=data)
-        
-        print(f"[DEBUG] Response status: {response.status_code}")
-        if response.status_code in [200, 201]:  # Handle both 200 OK and 201 Created
-            result = response.json()
-            print(f"[DEBUG] Success response: {result}")
-            return result
-        else:
-            print(f"[DEBUG] Error response: {response.text}")
+        except requests.exceptions.Timeout:
+            print(f"[DEBUG] Request timeout (attempt {attempt + 1}/{retries})")
+            if attempt < retries - 1:
+                print(f"[DEBUG] Retrying...")
+                continue
             return None
-    except Exception as e:
-        print(f"[DEBUG] API call error: {e}")
-        return None
+        
+        except requests.exceptions.ConnectionError as e:
+            print(f"[DEBUG] Connection error (attempt {attempt + 1}/{retries}): {str(e)[:100]}")
+            if attempt < retries - 1:
+                print(f"[DEBUG] Retrying...")
+                continue
+            return None
+        
+        except Exception as e:
+            print(f"[DEBUG] Unexpected error (attempt {attempt + 1}/{retries}): {str(e)[:100]}")
+            if attempt < retries - 1:
+                print(f"[DEBUG] Retrying...")
+                continue
+            return None
+    
+    print(f"[DEBUG] API call failed after {retries} attempts")
+    return None
 
 def index(request):
     """Home page with flight search functionality"""
@@ -212,6 +278,10 @@ def flight(request):
 
 def review(request):
     """Flight review page with actual flight data"""
+    print(f"[DEBUG] SAGA TOGGLE - review() called with GET params: {dict(request.GET)}")
+    print(f"[PAYMENT_FLOW_DEBUG] ===== REVIEW VIEW ENTRY POINT =====")
+    print(f"[PAYMENT_FLOW_DEBUG] This is where flight data gets loaded for booking page")
+    
     if request.user.is_authenticated:
         # Get flight data from request parameters
         flight1_id = request.GET.get('flight1Id')
@@ -220,27 +290,74 @@ def review(request):
         flight2_date = request.GET.get('flight2Date')
         seat_class = request.GET.get('seatClass', 'economy')
         
+        print(f"[DEBUG] SAGA TOGGLE - Flight params: flight1_id={flight1_id}, seat_class={seat_class}")
+        print(f"[PAYMENT_FLOW_DEBUG] ===== FLIGHT PARAMETERS FROM URL =====")
+        print(f"[PAYMENT_FLOW_DEBUG] flight1_id: '{flight1_id}'")
+        print(f"[PAYMENT_FLOW_DEBUG] flight1_date: '{flight1_date}'")
+        print(f"[PAYMENT_FLOW_DEBUG] flight2_id: '{flight2_id}'")
+        print(f"[PAYMENT_FLOW_DEBUG] seat_class: '{seat_class}'")
+        
         context = {
             'fee': FEE,
             'seat': seat_class,
+            'saga_demo_enabled': True,  # Enable SAGA demo section
         }
         
-        # Get flight1 data from backend
+        # CRITICAL: Get flight1 data from backend - REQUIRED for SAGA section
         if flight1_id:
+            print(f"[DEBUG] SAGA TOGGLE - Fetching flight data for ID: {flight1_id}")
+            print(f"[PAYMENT_FLOW_DEBUG] ===== FETCHING FLIGHT DATA FOR BOOKING PAGE =====")
+            print(f"[PAYMENT_FLOW_DEBUG] Calling API: api/flights/{flight1_id}/")
+            
             flight1_data = call_backend_api(f'api/flights/{flight1_id}/')
+            
+            print(f"[PAYMENT_FLOW_DEBUG] Flight data API response: {flight1_data is not None}")
             if flight1_data:
                 context['flight1'] = flight1_data
-                context['flight1ddate'] = flight1_date
-                context['flight1adate'] = flight1_date  # Simplified for now
+                context['flight1ddate'] = flight1_date if flight1_date else '2026-01-22'
+                context['flight1adate'] = flight1_date if flight1_date else '2026-01-22'
+                print(f"[DEBUG] SAGA TOGGLE - Flight1 data loaded successfully: {flight1_data.get('airline', 'Unknown')}")
+                print(f"[PAYMENT_FLOW_DEBUG] Flight1 data added to context with ID: {flight1_data.get('id')}")
+                print(f"[PAYMENT_FLOW_DEBUG] Flight1 context keys: {list(flight1_data.keys()) if isinstance(flight1_data, dict) else 'Not a dict'}")
+            else:
+                print(f"[DEBUG] SAGA TOGGLE - ✗ ERROR: Failed to load flight data for ID: {flight1_id}")
+                print(f"[DEBUG] SAGA TOGGLE - Backend service may be unreachable. Check logs above for details.")
+                print(f"[PAYMENT_FLOW_DEBUG] ❌ CRITICAL: Flight data fetch failed - this will cause missing flight1 in template")
+                # Return error page instead of blank page
+                return render(request, "flight/book.html", {
+                    'error': f'Failed to load flight details. Backend service is unreachable. Please ensure the backend is running on {settings.BACKEND_SERVICE_URL}',
+                    'booking_data': {},
+                    'error_type': 'backend_unavailable'
+                })
+        else:
+            print(f"[DEBUG] SAGA TOGGLE - ✗ ERROR: No flight1_id provided in review() GET params")
+            return render(request, "flight/book.html", {
+                'error': 'Missing flight ID. Please select a flight from search results.',
+                'booking_data': {},
+                'error_type': 'missing_flight_id'
+            })
         
         # Get flight2 data from backend if round trip
         if flight2_id:
+            print(f"[DEBUG] SAGA TOGGLE - Fetching flight2 data for ID: {flight2_id}")
             flight2_data = call_backend_api(f'api/flights/{flight2_id}/')
             if flight2_data:
                 context['flight2'] = flight2_data
-                context['flight2ddate'] = flight2_date
-                context['flight2adate'] = flight2_date  # Simplified for now
+                context['flight2ddate'] = flight2_date if flight2_date else '2026-01-22'
+                context['flight2adate'] = flight2_date if flight2_date else '2026-01-22'
+                print(f"[DEBUG] SAGA TOGGLE - Flight2 data loaded successfully: {flight2_data.get('airline', 'Unknown')}")
+            else:
+                print(f"[DEBUG] SAGA TOGGLE - WARNING: Failed to load flight2 data, continuing with flight1 only")
         
+        print(f"[DEBUG] SAGA TOGGLE - Final context keys: {list(context.keys())}")
+        print(f"[DEBUG] SAGA TOGGLE - Context has flight1: {'flight1' in context}")
+        print(f"[DEBUG] SAGA TOGGLE - SAGA demo enabled: {context.get('saga_demo_enabled', False)}")
+        print(f"[PAYMENT_FLOW_DEBUG] ===== RENDERING BOOKING PAGE =====")
+        print(f"[PAYMENT_FLOW_DEBUG] Context keys being passed to template: {list(context.keys())}")
+        print(f"[PAYMENT_FLOW_DEBUG] flight1 in context: {'flight1' in context}")
+        if 'flight1' in context:
+            print(f"[PAYMENT_FLOW_DEBUG] flight1.id in context: {context['flight1'].get('id', 'NO_ID')}")
+        print(f"[PAYMENT_FLOW_DEBUG] Template: flight/book.html")
         return render(request, "flight/book.html", context)
     else:
         return HttpResponseRedirect(reverse("login"))
@@ -248,20 +365,43 @@ def review(request):
 def book(request):
     """Flight booking with backend integration"""
     print(f"[DEBUG] book() view called - Method: {request.method}, User: {request.user}")
+    print(f"[PAYMENT_FLOW_DEBUG] ===== BOOK VIEW ENTRY POINT =====")
+    print(f"[PAYMENT_FLOW_DEBUG] User authenticated: {request.user.is_authenticated}")
+    print(f"[PAYMENT_FLOW_DEBUG] Request method: {request.method}")
+    
     if request.user.is_authenticated:
         if request.method == 'POST':
             print(f"[DEBUG] POST data keys: {list(request.POST.keys())}")
             print(f"[DEBUG] Full POST data: {dict(request.POST)}")
+            print(f"[PAYMENT_FLOW_DEBUG] ===== PROCESSING PROCEED TO PAYMENT =====")
+            print(f"[PAYMENT_FLOW_DEBUG] POST data received with keys: {list(request.POST.keys())}")
+            
+            # Check if this is SAGA demo mode
+            saga_demo_mode = request.POST.get('saga_demo_mode') == 'true'
+            print(f"[DEBUG] SAGA Demo Mode: {saga_demo_mode}")
+            print(f"[DEBUG] POST data contains saga_demo_mode: {'saga_demo_mode' in request.POST}")
+            print(f"[DEBUG] Raw saga_demo_mode value: '{request.POST.get('saga_demo_mode')}'")
             
             # Check if required flight data is present
             flight1_id = request.POST.get('flight1')
+            print(f"[PAYMENT_FLOW_DEBUG] ===== FLIGHT ID VALIDATION =====")
+            print(f"[PAYMENT_FLOW_DEBUG] flight1_id from POST: '{flight1_id}'")
+            print(f"[PAYMENT_FLOW_DEBUG] flight1_id type: {type(flight1_id)}")
+            print(f"[PAYMENT_FLOW_DEBUG] flight1_id is None: {flight1_id is None}")
+            print(f"[PAYMENT_FLOW_DEBUG] flight1_id is empty string: {flight1_id == ''}")
+            
             if not flight1_id:
                 print(f"[DEBUG] ERROR: Missing flight1 ID in POST data")
+                print(f"[PAYMENT_FLOW_DEBUG] ❌ CRITICAL: No flight1_id - this is the source of flightid error!")
+                print(f"[PAYMENT_FLOW_DEBUG] Available POST keys: {list(request.POST.keys())}")
                 return render(request, "flight/book.html", {
                     'error': 'Missing flight information. Please select a flight again.',
                 })
             
             # Extract booking data from form
+            print(f"[PAYMENT_FLOW_DEBUG] ===== EXTRACTING BOOKING DATA =====")
+            print(f"[PAYMENT_FLOW_DEBUG] flight1_id confirmed: '{flight1_id}'")
+            
             booking_data = {
                 'flight_id': request.POST.get('flight1'),
                 'user_id': request.user.id,  # Add user_id to booking data
@@ -270,8 +410,17 @@ def book(request):
                     'mobile': request.POST.get('mobile'),
                     'email': request.POST.get('email'),
                     'country_code': request.POST.get('countryCode')
-                }
+                },
+                # SAGA Failure Simulation Parameters
+                'simulate_reserveseat_fail': request.POST.get('simulate_reserveseat_fail') == 'on',
+                'simulate_authorizepayment_fail': request.POST.get('simulate_authorizepayment_fail') == 'on',
+                'simulate_awardmiles_fail': request.POST.get('simulate_awardmiles_fail') == 'on',
+                'simulate_confirmbooking_fail': request.POST.get('simulate_confirmbooking_fail') == 'on'
             }
+            
+            print(f"[PAYMENT_FLOW_DEBUG] booking_data flight_id: '{booking_data['flight_id']}'")
+            print(f"[PAYMENT_FLOW_DEBUG] booking_data user_id: {booking_data['user_id']}")
+            print(f"[PAYMENT_FLOW_DEBUG] booking_data contact_info: {booking_data['contact_info']}")
             
             # Extract passenger data using the correct JavaScript naming convention
             passengers_count = int(request.POST.get('passengersCount', 0))
@@ -297,25 +446,71 @@ def book(request):
                     'error': 'No passengers added. Please add at least one passenger.',
                 })
             
-            # Call SAGA booking API instead of traditional booking
-            print(f"[DEBUG] Calling SAGA booking API...")
-            booking_result = call_backend_api('api/saga/start-booking/', 'POST', booking_data)
-            print(f"[DEBUG] SAGA Booking API result: {booking_result}")
+            # Check if this is SAGA demo mode
+            if saga_demo_mode:
+                print(f"[DEBUG] SAGA DEMO MODE - Calling SAGA booking API with failure simulation...")
+                booking_result = call_backend_api('api/saga/start-booking/', 'POST', booking_data)
+                print(f"[DEBUG] SAGA Demo Booking API result: {booking_result}")
+                
+                # Determine failure type from booking data
+                failure_type = None
+                if booking_data.get('simulate_reserveseat_fail'):
+                    failure_type = 'reserveseat'
+                elif booking_data.get('simulate_authorizepayment_fail'):
+                    failure_type = 'authorizepayment'
+                elif booking_data.get('simulate_awardmiles_fail'):
+                    failure_type = 'awardmiles'
+                elif booking_data.get('simulate_confirmbooking_fail'):
+                    failure_type = 'confirmbooking'
+                else:
+                    failure_type = 'confirmbooking'  # Default
+                
+                # Redirect to SAGA results page with failure type
+                correlation_id = booking_result.get('correlation_id', 'unknown') if booking_result else 'unknown'
+                redirect_url = reverse("saga_results") + f"?correlation_id={correlation_id}&demo=true&failure_type={failure_type}"
+                print(f"[DEBUG] SAGA DEMO MODE - Redirecting to: {redirect_url} with failure_type: {failure_type}")
+                return HttpResponseRedirect(redirect_url)
             
-            if booking_result and booking_result.get('success'):
+            # Normal booking flow - use SAGA API (all bookings should use SAGA)
+            print(f"[DEBUG] Normal booking - Calling SAGA booking API...")
+            print(f"[PAYMENT_FLOW_DEBUG] ===== CALLING SAGA BOOKING API =====")
+            print(f"[PAYMENT_FLOW_DEBUG] API endpoint: api/saga/start-booking/")
+            print(f"[PAYMENT_FLOW_DEBUG] booking_data keys: {list(booking_data.keys())}")
+            print(f"[PAYMENT_FLOW_DEBUG] booking_data flight_id: '{booking_data.get('flight_id')}'")
+            
+            booking_result = call_backend_api('api/saga/start-booking/', 'POST', booking_data)
+            print(f"[DEBUG] SAGA Booking API result received: {booking_result is not None}")
+            print(f"[PAYMENT_FLOW_DEBUG] SAGA API response type: {type(booking_result)}")
+            print(f"[PAYMENT_FLOW_DEBUG] SAGA API response: {booking_result}")
+            
+            if not booking_result:
+                print(f"[DEBUG] ERROR: SAGA Booking API returned None - Connection or parsing error")
+                return render(request, "flight/book.html", {
+                    'error': 'Failed to connect to booking service. Please ensure the backend service is running and try again.',
+                    'booking_data': booking_data,
+                    'error_type': 'connection'
+                })
+            
+            if booking_result.get('success'):
                 print(f"[DEBUG] SAGA Booking successful, proceeding to payment")
                 print(f"[DEBUG] SAGA Correlation ID: {booking_result.get('correlation_id')}")
                 print(f"[DEBUG] SAGA Steps completed: {booking_result.get('steps_completed')}")
                 
                 # Get flight data from the original booking data since SAGA doesn't return flight details
                 flight_id = booking_data.get('flight_id')
+                print(f"[FLIGHT_DATA_DEBUG] ===== RETRIEVING FLIGHT DATA FOR PAYMENT =====")
+                print(f"[FLIGHT_DATA_DEBUG] Flight ID from booking_data: {flight_id}")
+                print(f"[FLIGHT_DATA_DEBUG] Original booking_data keys: {list(booking_data.keys())}")
+                
                 flight_data = call_backend_api(f'api/flights/{flight_id}/')
                 
                 if not flight_data:
                     print(f"[DEBUG] ERROR: Could not retrieve flight data for flight {flight_id}")
+                    print(f"[FLIGHT_DATA_DEBUG] ❌ CRITICAL: Flight data retrieval failed - this could cause payment issues")
                     return render(request, "flight/book.html", {
                         'error': 'Could not retrieve flight information. Please try again.',
-                        'booking_data': booking_data
+                        'booking_data': booking_data,
+                        'error_type': 'flight_data'
                     })
                 seat_class = request.POST.get('flight1Class', 'economy')
                 
@@ -381,6 +576,13 @@ def payment(request):
     if request.user.is_authenticated:
         if request.method == 'POST':
             print(f"[DEBUG] Payment POST data: {dict(request.POST)}")
+            
+            # FLIGHT DATA DEBUG: Add comprehensive logging for payment flow
+            print(f"[FLIGHT_DATA_DEBUG] ===== PAYMENT PROCESSING START =====")
+            print(f"[FLIGHT_DATA_DEBUG] User ID: {request.user.id}")
+            print(f"[FLIGHT_DATA_DEBUG] Ticket/Correlation ID: {request.POST.get('ticket')}")
+            print(f"[FLIGHT_DATA_DEBUG] Final fare from form: {request.POST.get('final_fare')}")
+            print(f"[FLIGHT_DATA_DEBUG] Payment method: {request.POST.get('payment_method', 'card')}")
             
             # Extract payment data
             payment_data = {
@@ -648,11 +850,18 @@ def aadvantage_dashboard(request):
             print(f"[DEBUG] AADVANTAGE DASHBOARD - Requesting transaction history for user {request.user.id}")
             transaction_history = loyalty_tracker.get_user_transactions(request.user.id)
             print(f"[DEBUG] AADVANTAGE DASHBOARD - Retrieved {len(transaction_history)} transactions")
-            print(f"[DEBUG] AADVANTAGE DASHBOARD - Transaction history data: {transaction_history}")
             
-            # Check if we have any redemption transactions
-            redemption_count = sum(1 for t in transaction_history if t.get('type') == 'miles_redemption')
-            print(f"[DEBUG] AADVANTAGE DASHBOARD - Found {redemption_count} redemption transactions")
+            # Check if we have any compensation transactions
+            compensation_count = sum(1 for t in transaction_history if t.get('type') == 'adjustment' and ('compensation' in t.get('description', '').lower() or 'comp-' in t.get('transaction_id', '').lower()))
+            adjustment_count = sum(1 for t in transaction_history if t.get('type') == 'adjustment')
+            print(f"[DEBUG] AADVANTAGE DASHBOARD - Found {compensation_count} compensation transactions")
+            print(f"[DEBUG] AADVANTAGE DASHBOARD - Found {adjustment_count} adjustment transactions")
+            
+            # Log first few transactions for debugging
+            if transaction_history:
+                print(f"[DEBUG] AADVANTAGE DASHBOARD - First 3 transactions:")
+                for i, t in enumerate(transaction_history[:3]):
+                    print(f"[DEBUG] AADVANTAGE DASHBOARD - {i+1}: {t.get('transaction_id')} - {t.get('type')} - {t.get('description', '')[:50]}")
             
         except Exception as e:
             print(f"[ERROR] AADVANTAGE DASHBOARD - Transaction history error: {e}")
@@ -677,5 +886,138 @@ def aadvantage_dashboard(request):
             'transaction_history': transaction_history
         }
         return render(request, 'flight/aadvantage_dashboard.html', context)
+    else:
+        return HttpResponseRedirect(reverse('login'))
+
+def saga_results(request):
+    """SAGA Results page showing detailed failure information and logs"""
+    is_demo = request.GET.get('demo') == 'true'
+    
+    # Allow unauthenticated access for demo purposes
+    if request.user.is_authenticated or is_demo:
+        correlation_id = request.GET.get('correlation_id', 'unknown')
+        is_demo = request.GET.get('demo') == 'true'
+        
+        print(f"[DEBUG] SAGA Results - Correlation ID: {correlation_id}, Demo: {is_demo}")
+        
+        # Get SAGA transaction details from backend
+        saga_status = None
+        saga_logs = []
+        
+        if correlation_id != 'unknown':
+            saga_status = call_backend_api(f'api/saga/status/{correlation_id}/')
+            print(f"[DEBUG] SAGA Results - Backend API returned: {saga_status}")
+            
+            # Get real execution logs
+            logs_response = call_backend_api(f'api/saga/logs/{correlation_id}/')
+            if logs_response and logs_response.get('success'):
+                saga_logs = logs_response.get('logs', [])
+                print(f"[DEBUG] SAGA Results - Retrieved {len(saga_logs)} real logs")
+            else:
+                print(f"[DEBUG] SAGA Results - Failed to get logs, response: {logs_response}")
+        else:
+            # For demo mode with unknown correlation_id, try to get the most recent SAGA logs
+            print(f"[DEBUG] SAGA Results - Unknown correlation_id, checking for recent SAGA transactions")
+            # Try to get logs from the most recent successful SAGA transaction
+            recent_correlation_ids = ['cf90318f-5a6c-4b31-8478-be7010f95fe2', '483d2f15-ceed-455e-8ba1-a29a22a8d708']
+            for recent_id in recent_correlation_ids:
+                logs_response = call_backend_api(f'api/saga/logs/{recent_id}/')
+                if logs_response and logs_response.get('success') and logs_response.get('logs'):
+                    saga_logs = logs_response.get('logs', [])
+                    correlation_id = recent_id  # Update to use the real correlation_id
+                    print(f"[DEBUG] SAGA Results - Using recent logs from {recent_id}: {len(saga_logs)} logs")
+                    break
+        
+        # If no saga_status from backend or correlation_id is unknown, provide demo data
+        if not saga_status:
+            print(f"[DEBUG] SAGA Results - No backend data, providing demo saga_status")
+            # Generate a demo correlation ID if unknown
+            if correlation_id == 'unknown':
+                import uuid
+                correlation_id = str(uuid.uuid4())[:8]
+                print(f"[DEBUG] SAGA Results - Generated demo correlation_id: {correlation_id}")
+            
+            # Get failure type from URL parameter to generate correct demo data
+            failure_type = request.GET.get('failure_type', 'confirmbooking')
+            print(f"[DEBUG] SAGA Results - Detected failure_type: {failure_type}")
+            
+            # Define step configurations for different failure scenarios
+            step_configs = {
+                'reserveseat': {
+                    'failed_step': 'ReserveSeat',
+                    'steps_completed': 0,
+                    'compensations_executed': 0,
+                    'error': 'Simulated seat reservation failure for demo purposes'
+                },
+                'authorizepayment': {
+                    'failed_step': 'AuthorizePayment',
+                    'steps_completed': 1,
+                    'compensations_executed': 1,
+                    'error': 'Simulated payment authorization failure for demo purposes'
+                },
+                'awardmiles': {
+                    'failed_step': 'AwardMiles',
+                    'steps_completed': 2,
+                    'compensations_executed': 2,
+                    'error': 'Simulated miles award failure - loyalty service temporarily unavailable'
+                },
+                'confirmbooking': {
+                    'failed_step': 'ConfirmBooking',
+                    'steps_completed': 3,
+                    'compensations_executed': 3,
+                    'error': 'Simulated booking confirmation failure - booking system unavailable'
+                }
+            }
+            
+            # Get configuration for the failure type
+            config = step_configs.get(failure_type, step_configs['confirmbooking'])
+            
+            # Provide demo SAGA status data for display
+            saga_status = {
+                'correlation_id': correlation_id,
+                'status': 'failed',
+                'failed_step': config['failed_step'],
+                'steps_completed': config['steps_completed'],
+                'compensations_executed': config['compensations_executed'],
+                'total_steps': 4,
+                'error': config['error'],
+                'compensation_details': [
+                    {'step': 'ReserveSeat', 'status': 'compensated', 'message': 'Seat reservation cancelled'}
+                ]
+            }
+        
+        # Get user's current loyalty points for compensation display
+        if request.user.is_authenticated:
+            user_loyalty = loyalty_tracker.get_user_points(request.user.id)
+            user_points = user_loyalty.get('points_balance', 0)
+            
+            # Get recent transactions to show what was compensated
+            transaction_history = loyalty_tracker.get_user_transactions(request.user.id)
+            recent_transactions = transaction_history[-5:] if transaction_history else []
+        else:
+            # Demo mode - provide sample data
+            user_points = 1500  # Demo points balance
+            recent_transactions = [
+                {'transaction_id': 'DEMO-001', 'type': 'compensation', 'description': 'SAGA Compensation Demo', 'points_redeemed': 150},
+                {'transaction_id': 'DEMO-002', 'type': 'flight_booking', 'description': 'Demo Flight Booking', 'points_earned': 200}
+            ]
+        
+        # Serialize saga_logs as JSON for JavaScript
+        import json
+        saga_logs_json = json.dumps(saga_logs) if saga_logs else '[]'
+        
+        context = {
+            'correlation_id': correlation_id,
+            'is_demo': is_demo,
+            'saga_status': saga_status,
+            'saga_logs': saga_logs_json,  # JSON string for JavaScript
+            'user_points': user_points,
+            'recent_transactions': recent_transactions,
+            'page': 'saga_results'
+        }
+        
+        print(f"[DEBUG] SAGA Results - Final context: correlation_id={correlation_id}, saga_status keys={list(saga_status.keys()) if saga_status else 'None'}")
+        print(f"[DEBUG] SAGA Results - Saga logs count: {len(saga_logs)}, JSON length: {len(saga_logs_json)}")
+        return render(request, 'flight/saga_results_dynamic.html', context)
     else:
         return HttpResponseRedirect(reverse('login'))

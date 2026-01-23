@@ -88,4 +88,15 @@ def test_saga_payment_failure():
     except Exception as e:
         print(f"   Error: {e}")
 
-def test_
+if __name__ == "__main__":
+    print("SAGA Pattern Testing Suite")
+    print("=" * 50)
+    
+    # Test successful SAGA flow
+    test_saga_seat_reservation()
+    
+    # Test SAGA compensation
+    test_saga_payment_failure()
+    
+    print("\n" + "=" * 50)
+    print("SAGA Testing Complete!")

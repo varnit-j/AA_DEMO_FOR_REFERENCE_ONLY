@@ -24,22 +24,35 @@ def authorize_payment(request):
         booking_data = data.get('booking_data', {})
         simulate_failure = data.get('simulate_failure', False)
         
-        logger.info(f"[SAGA] AuthorizePayment step for correlation_id: {correlation_id}")
+        logger.info(f"[SAGA PAYMENT] 💳 AuthorizePayment step initiated for correlation_id: {correlation_id}")
+        logger.info(f"[SAGA PAYMENT] 📊 Processing payment authorization for booking")
         
         # Simulate failure if requested
         if simulate_failure:
-            logger.error(f"[SAGA] Simulated failure in AuthorizePayment for {correlation_id}")
+            logger.error(f"[SAGA PAYMENT] ❌ Simulated failure in AuthorizePayment for {correlation_id}")
+            logger.error(f"[SAGA PAYMENT] 🔄 This will trigger compensation for seat reservation")
             return JsonResponse({
                 "success": False,
-                "error": "Simulated payment authorization failure"
+                "error": "Simulated payment authorization failure - payment gateway unavailable"
             })
+        
+        # FLIGHT DATA DEBUG: Log payment authorization data
+        logger.info(f"[FLIGHT_DATA_DEBUG] ===== PAYMENT AUTHORIZATION =====")
+        logger.info(f"[FLIGHT_DATA_DEBUG] Correlation ID: {correlation_id}")
+        logger.info(f"[FLIGHT_DATA_DEBUG] Booking data keys: {list(booking_data.keys())}")
         
         # Extract payment information
         flight_fare = booking_data.get('flight_fare', 0)
+        logger.info(f"[FLIGHT_DATA_DEBUG] Flight fare from booking_data: {flight_fare}")
+        
         if not flight_fare:
             # Try to get fare from flight data
             flight_data = booking_data.get('flight', {})
             flight_fare = flight_data.get('economy_fare', 500)  # Default fare
+            logger.info(f"[FLIGHT_DATA_DEBUG] ⚠️ Using fallback fare from flight data: {flight_fare}")
+            logger.info(f"[FLIGHT_DATA_DEBUG] Flight data available: {flight_data}")
+        else:
+            logger.info(f"[FLIGHT_DATA_DEBUG] ✓ Using flight_fare from booking_data: {flight_fare}")
         
         other_charges = 50.0  # Standard charges
         total_amount = float(flight_fare) + other_charges
@@ -58,7 +71,8 @@ def authorize_payment(request):
             "payment_method": "mock_card"
         }
         
-        logger.info(f"[SAGA] Payment authorized successfully. Amount: ${total_amount}")
+        logger.info(f"[SAGA PAYMENT] ✅ Payment authorized successfully! Amount: ${total_amount}")
+        logger.info(f"[SAGA PAYMENT] 🎯 Authorization ID: {authorization_id}")
         
         return JsonResponse({
             "success": True,
@@ -86,14 +100,15 @@ def cancel_payment(request):
         data = json.loads(request.body)
         correlation_id = data.get('correlation_id')
         
-        logger.info(f"[SAGA] CancelPayment compensation for correlation_id: {correlation_id}")
+        logger.info(f"[SAGA PAYMENT COMPENSATION] 🔄 CancelPayment compensation initiated for correlation_id: {correlation_id}")
         
         # Check if we have an authorization record
         if correlation_id not in saga_payment_authorizations:
-            logger.warning(f"[SAGA] No payment authorization found for {correlation_id}")
+            logger.warning(f"[SAGA PAYMENT COMPENSATION] ⚠️ No payment authorization found for {correlation_id}")
+            logger.info(f"[SAGA PAYMENT COMPENSATION] ✅ No compensation needed - no payment was authorized")
             return JsonResponse({
                 "success": True,  # Return success even if no record found
-                "message": "No payment authorization to cancel",
+                "message": "No payment authorization to cancel - compensation complete",
                 "correlation_id": correlation_id
             })
         
@@ -101,16 +116,19 @@ def cancel_payment(request):
         authorization_id = auth_record['authorization_id']
         amount = auth_record['amount']
         
-        logger.info(f"[SAGA] Cancelling payment authorization {authorization_id} for ${amount}")
+        logger.info(f"[SAGA PAYMENT COMPENSATION] 💳 Found authorization to cancel: {authorization_id}")
+        logger.info(f"[SAGA PAYMENT COMPENSATION] 💰 Cancelling payment authorization for ${amount}")
         
         # Mock payment cancellation
         # In real implementation, this would call payment gateway to void/cancel authorization
+        logger.info(f"[SAGA PAYMENT COMPENSATION] 🏦 Calling payment gateway to void authorization...")
         
         # Update authorization record
         saga_payment_authorizations[correlation_id]['status'] = 'CANCELLED'
-        saga_payment_authorizations[correlation_id]['cancelled_at'] = '2026-01-19T12:42:00Z'
+        saga_payment_authorizations[correlation_id]['cancelled_at'] = '2026-01-22T15:14:00Z'
         
-        logger.info(f"[SAGA] Payment authorization cancelled successfully")
+        logger.info(f"[SAGA PAYMENT COMPENSATION] ✅ Payment authorization cancelled successfully!")
+        logger.info(f"[SAGA PAYMENT COMPENSATION] 🎯 Payment service compensation complete for correlation_id: {correlation_id}")
         
         return JsonResponse({
             "success": True,

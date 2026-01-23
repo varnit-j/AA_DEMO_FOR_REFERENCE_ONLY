@@ -6,6 +6,7 @@ from django.utils import timezone
 from .models import LoyaltyAccount, LoyaltyTransaction, SagaMilesAward
 import json
 from datetime import datetime
+import pytz
 
 def loyalty_status(request):
     """Basic loyalty status endpoint for AAdvantage dashboard"""
@@ -102,13 +103,23 @@ def get_transaction_history(request, user_id):
         # Get transactions from database
         transactions = LoyaltyTransaction.objects.filter(account=account).order_by('-created_at')
         
+        # DIAGNOSTIC: Log transaction types and compensation entries
+        print(f"[DASHBOARD_DEBUG] Transaction history requested for user_id: {user_id}")
+        print(f"[DASHBOARD_DEBUG] Total transactions found: {transactions.count()}")
+        compensation_count = sum(1 for t in transactions if 'compensation' in t.description.lower() or 'comp-' in t.transaction_id.lower())
+        adjustment_count = sum(1 for t in transactions if t.transaction_type == 'adjustment')
+        print(f"[DASHBOARD_DEBUG] Compensation transactions: {compensation_count}")
+        print(f"[DASHBOARD_DEBUG] Adjustment transactions: {adjustment_count}")
+        
         # Format transactions for response
         transaction_list = []
         for trans in transactions:
             transaction_data = {
                 'transaction_id': trans.transaction_id,
                 'type': trans.transaction_type,
-                'date': trans.created_at.strftime('%Y-%m-%d %H:%M'),
+                'date': trans.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                'date_utc': trans.created_at.isoformat(),
+                'date_local': trans.created_at.astimezone(pytz.timezone('Asia/Calcutta')).strftime('%Y-%m-%d %H:%M:%S IST'),
                 'description': trans.description
             }
             
@@ -132,6 +143,8 @@ def get_transaction_history(request, user_id):
         })
     except Exception as e:
         print(f"[ERROR] Get transaction history error: {e}")
+        import traceback
+        print(f"[ERROR] Full traceback: {traceback.format_exc()}")
         return JsonResponse({'error': str(e)}, status=500)
 
 @csrf_exempt

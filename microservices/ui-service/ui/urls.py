@@ -28,6 +28,7 @@ urlpatterns = [
     path('terms-and-conditions', views.terms_and_conditions, name="termsandconditions"),
     path('about-us', views.about_us, name="aboutus"),
     path('aadvantage/dashboard', views.aadvantage_dashboard, name="aadvantage_dashboard"),
+    path('saga/results', views.saga_results, name="saga_results"),
 ]
 
 if settings.DEBUG:

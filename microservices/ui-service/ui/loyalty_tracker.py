@@ -3,9 +3,11 @@ Loyalty points tracker for microservices architecture
 This module only interfaces with the loyalty service - no local storage
 """
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
+import pytz
+from .timezone_utils import add_timezone_info_to_transactions
 
-LOYALTY_SERVICE_URL = 'http://localhost:8002'
+LOYALTY_SERVICE_URL = 'http://localhost:8003'
 
 def call_loyalty_service(endpoint, method='GET', data=None):
     """Make API call to loyalty service"""
@@ -58,9 +60,28 @@ def get_user_transactions(user_id):
         # Try the correct API endpoint first
         result = call_loyalty_service(f'/api/loyalty/history/{user_id}/')
         if result:
-            print(f"[DEBUG] TRANSACTION HISTORY - Successfully retrieved {len(result.get('transactions', []))} transactions")
-            print(f"[DEBUG] TRANSACTION HISTORY - Raw response: {result}")
-            return result.get('transactions', [])
+            transactions = result.get('transactions', [])
+            print(f"[DEBUG] TRANSACTION HISTORY - Successfully retrieved {len(transactions)} transactions")
+            
+            # Clean up emoji characters from descriptions to prevent encoding issues
+            cleaned_transactions = []
+            for transaction in transactions:
+                cleaned_transaction = transaction.copy()
+                if 'description' in cleaned_transaction:
+                    # Remove all problematic Unicode characters
+                    description = str(cleaned_transaction['description'])
+                    # Replace specific emoji patterns
+                    description = description.replace('🔄', 'SAGA Compensation:')
+                    description = description.replace('✈️', 'Flight booking')
+                    description = description.replace('\ud83d\udd04', 'SAGA Compensation:')
+                    description = description.replace('\u2708\ufe0f', 'Flight booking')
+                    # Remove any remaining high Unicode characters that cause encoding issues
+                    description = description.encode('ascii', 'ignore').decode('ascii')
+                    cleaned_transaction['description'] = description
+                cleaned_transactions.append(cleaned_transaction)
+            
+            # Apply timezone conversion
+            return add_timezone_info_to_transactions(cleaned_transactions)
         else:
             print(f"[ERROR] TRANSACTION HISTORY - Failed to get user transactions from loyalty service")
             print(f"[DEBUG] TRANSACTION HISTORY - Trying alternative endpoint...")

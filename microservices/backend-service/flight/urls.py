@@ -40,4 +40,6 @@ if SAGA_AVAILABLE:
         
         # SAGA Management endpoints
         path('saga/status/<str:correlation_id>/', saga_views_complete.get_saga_status, name='saga_status'),
+        path('saga/logs/<str:correlation_id>/', saga_views_complete.get_saga_logs, name='saga_logs'),
+        path('saga/demo-failure/', saga_views_complete.demo_saga_failure, name='saga_demo_failure'),
     ]

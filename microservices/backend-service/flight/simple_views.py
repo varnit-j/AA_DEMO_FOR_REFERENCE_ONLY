@@ -245,8 +245,22 @@ def get_user_tickets_with_saga(request, user_id):
         
         # Get SAGA bookings from database
         try:
-            saga_tickets = Ticket.objects.filter(user_id=user_id)
-            print(f"[DEBUG] SAGA FIX - Database tickets for user {user_id}: {len(saga_tickets)} tickets")
+            # CRITICAL FIX: Handle both user objects and user IDs properly
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            
+            # Try to get tickets by user object first, then by user_id if user exists
+            saga_tickets = []
+            try:
+                user_obj = User.objects.get(id=user_id)
+                saga_tickets = Ticket.objects.filter(user=user_obj)
+                print(f"[DEBUG] BOOKING DISPLAY FIX - Found user object {user_id}, querying tickets by user")
+            except User.DoesNotExist:
+                print(f"[DEBUG] BOOKING DISPLAY FIX - User {user_id} not found, checking tickets without user")
+                # Also check for tickets that might have been created without user association
+                saga_tickets = Ticket.objects.filter(user__isnull=True)
+            
+            print(f"[DEBUG] BOOKING DISPLAY FIX - Database tickets for user {user_id}: {len(saga_tickets)} tickets")
             
             # Convert database tickets to the same format as simple tickets
             for ticket in saga_tickets:
@@ -369,10 +383,10 @@ def get_flight_detail(request, flight_id):
                 'airport': flight.destination.airport
             },
             'depart_time': str(flight.depart_time),
-            'arrival_time': str(flight.arrival_time),
-            'economy_fare': float(flight.economy_fare),
-            'business_fare': float(flight.business_fare),
-            'first_fare': float(flight.first_fare),
+            'arrival_time': str(flight.arrival_time) if flight.arrival_time else '00:00:00',
+            'economy_fare': float(flight.economy_fare) if flight.economy_fare else 0.0,
+            'business_fare': float(flight.business_fare) if flight.business_fare else 0.0,
+            'first_fare': float(flight.first_fare) if flight.first_fare else 0.0,
             'duration': str(flight.duration)
         }
         

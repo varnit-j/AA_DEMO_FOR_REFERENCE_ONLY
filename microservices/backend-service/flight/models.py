@@ -70,7 +70,9 @@ SEAT_CLASS = (
 TICKET_STATUS =(
     ('PENDING', 'Pending'),
     ('CONFIRMED', 'Confirmed'),
-    ('CANCELLED', 'Cancelled')
+    ('CANCELLED', 'Cancelled'),
+    ('ON_HOLD', 'On Hold - Pay at Counter'),
+    ('FAILED', 'Failed')
 )
 
 class Ticket(models.Model):
@@ -90,6 +92,13 @@ class Ticket(models.Model):
     mobile = models.CharField(max_length=20,blank=True)
     email = models.EmailField(max_length=45, blank=True)
     status = models.CharField(max_length=45, choices=TICKET_STATUS)
+    
+    # SAGA failure tracking fields
+    saga_correlation_id = models.CharField(max_length=50, blank=True, null=True)
+    failed_step = models.CharField(max_length=50, blank=True, null=True)
+    failure_reason = models.TextField(blank=True, null=True)
+    compensation_executed = models.BooleanField(default=False)
+    compensation_details = models.JSONField(blank=True, null=True)
 
     def __str__(self):
         return self.ref_no

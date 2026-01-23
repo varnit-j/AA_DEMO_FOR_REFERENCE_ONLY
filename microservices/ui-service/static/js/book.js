@@ -1,13 +1,12 @@
 document.addEventListener('DOMContentLoaded', () => {
     flight_duration();
+    initSagaToggles();
 });
 
 function flight_duration() {
     document.querySelectorAll(".duration").forEach(element => {
         let time = element.dataset.value.split(":");
-        let hours = time[0] || "0";
-        let minutes = time[1] || "0";
-        element.innerText = hours + "h " + minutes + "m";
+        element.innerText = time[0]+"h "+time[1]+"m";
     });
 }
 
@@ -132,11 +131,41 @@ function book_submit() {
     let pcount = document.querySelector("#p-count");
     console.log("[DEBUG] Passenger count:", pcount ? pcount.value : "null");
     
+    // Check if any SAGA demo checkbox is selected
+    const sagaCheckboxes = document.querySelectorAll('.saga-demo-section input[type="checkbox"]:checked');
+    console.log("[DEBUG] SAGA checkboxes checked:", sagaCheckboxes.length);
+    
+    if (sagaCheckboxes.length > 0) {
+        console.log("[DEBUG] SAGA DEMO MODE - Allowing form submission with SAGA parameters");
+        
+        if(parseInt(pcount.value) > 0) {
+            const checkedCheckbox = sagaCheckboxes[0];
+            console.log(`[DEBUG] SAGA MODE - Submitting with failure type: ${checkedCheckbox.name}`);
+            
+            // Add a hidden field to indicate SAGA mode
+            const form = document.querySelector('form');
+            let sagaModeInput = document.querySelector('input[name="saga_demo_mode"]');
+            if (!sagaModeInput) {
+                sagaModeInput = document.createElement('input');
+                sagaModeInput.type = 'hidden';
+                sagaModeInput.name = 'saga_demo_mode';
+                form.appendChild(sagaModeInput);
+            }
+            sagaModeInput.value = 'true';
+            
+            // Allow form submission to proceed with SAGA parameters
+            return true;
+        } else {
+            alert("Please add at least one passenger before starting SAGA demo.");
+            return false;
+        }
+    }
+    
+    // Normal booking flow
     if(parseInt(pcount.value) > 0) {
-        console.log("[DEBUG] Validation passed, allowing form submission");
+        console.log("[DEBUG] Normal booking - allowing form submission");
         return true;
     }
-    console.log("[DEBUG] Validation failed - no passengers added");
     alert("Please add atleast one passenger.")
     return false;
 }
@@ -147,4 +176,50 @@ function formatINR(amount) {
         return "₹0";
     }
     return "₹" + parseInt(amount).toLocaleString('en-IN');
+}
+
+// SAGA Demo Functions
+function initSagaToggles() {
+    console.log("[DEBUG] SAGA TOGGLE - Initializing SAGA demo toggles");
+    
+    const sagaSection = document.querySelector('.saga-demo-section');
+    if (sagaSection) {
+        console.log("[DEBUG] SAGA TOGGLE - SAGA demo section found!");
+        
+        // Add event listeners to toggle switches for mutual exclusivity
+        const toggles = sagaSection.querySelectorAll('input[type="checkbox"]');
+        toggles.forEach((toggle) => {
+            toggle.addEventListener('change', function() {
+                if (this.checked) {
+                    // Uncheck other toggles
+                    toggles.forEach(otherToggle => {
+                        if (otherToggle !== this) {
+                            otherToggle.checked = false;
+                        }
+                    });
+                    console.log(`[DEBUG] SAGA TOGGLE - Selected: ${this.name}`);
+                }
+            });
+        });
+    } else {
+        console.log("[DEBUG] SAGA TOGGLE - SAGA demo section NOT found!");
+    }
+}
+
+function showSagaDemo(failureType) {
+    console.log(`[SAGA DEMO] Starting SAGA demonstration with failure type: ${failureType}`);
+    
+    const failureDescriptions = {
+        'simulate_reserveseat_fail': 'Seat Reservation Failure (Step 1)',
+        'simulate_authorizepayment_fail': 'Payment Authorization Failure (Step 2)',
+        'simulate_awardmiles_fail': 'Miles Award Failure (Step 3)',
+        'simulate_confirmbooking_fail': 'Booking Confirmation Failure (Step 4)'
+    };
+    
+    const description = failureDescriptions[failureType] || 'Unknown Failure Type';
+    
+    // Simple alert for now - can be enhanced later
+    alert(`SAGA Demo: ${description}\n\nThis demonstrates the SAGA pattern where:\n1. Each step is executed\n2. If a step fails, compensation actions are triggered\n3. All completed steps are rolled back\n\nIn a real implementation, you would see step-by-step progression and compensation.`);
+    
+    console.log(`[SAGA DEMO] Demo completed for: ${description}`);
 }

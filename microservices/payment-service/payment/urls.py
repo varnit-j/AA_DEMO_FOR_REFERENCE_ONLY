@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
-from . import views, saga_views, saga_compensation
+from . import views, saga_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -13,5 +13,5 @@ urlpatterns = [
     
     # SAGA endpoints
     path('api/saga/authorize-payment/', saga_views.authorize_payment, name='saga_authorize_payment'),
-    path('api/saga/cancel-payment/', saga_compensation.cancel_payment_complete, name='saga_cancel_payment'),
+    path('api/saga/cancel-payment/', saga_views.cancel_payment, name='saga_cancel_payment'),
 ]

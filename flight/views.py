@@ -647,6 +647,23 @@ def get_ticket(request):
 def bookings(request):
     if request.user.is_authenticated:
         tickets = Ticket.objects.filter(user=request.user).order_by('-booking_date')
+        
+        # DEBUG LOGGING: Check what tickets are being displayed
+        print(f"[BOOKINGS DEBUG] 🔍 User {request.user.username} (ID: {request.user.id}) requesting bookings")
+        print(f"[BOOKINGS DEBUG] 📊 Total tickets found: {tickets.count()}")
+        
+        for ticket in tickets:
+            print(f"[BOOKINGS DEBUG] 🎫 Ticket {ticket.ref_no}: Status={ticket.status}, User={ticket.user_id}, SAGA_ID={ticket.saga_correlation_id}")
+            if ticket.status == 'FAILED':
+                print(f"[BOOKINGS DEBUG] ❌ FAILED ticket details: Step={ticket.failed_step}, Reason={ticket.failure_reason}, Compensation={ticket.compensation_executed}")
+        
+        # Also check for any failed tickets that might not be associated with user
+        all_failed_tickets = Ticket.objects.filter(status='FAILED').order_by('-booking_date')
+        print(f"[BOOKINGS DEBUG] 🚨 Total FAILED tickets in system: {all_failed_tickets.count()}")
+        
+        for failed_ticket in all_failed_tickets:
+            print(f"[BOOKINGS DEBUG] 🚨 System FAILED ticket {failed_ticket.ref_no}: User={failed_ticket.user_id}, SAGA_ID={failed_ticket.saga_correlation_id}")
+        
         return render(request, 'flight/bookings.html', {
             'page': 'bookings',
             'tickets': tickets
@@ -700,6 +717,58 @@ def terms_and_conditions(request):
 
 def about_us(request):
     return render(request, 'flight/about.html')
+
+
+def saga_test(request):
+    """View for testing SAGA orchestrator with different failure scenarios"""
+    from .saga_orchestrator_enhanced import EnhancedBookingSAGAOrchestrator
+    from datetime import datetime
+    
+    result = None
+    
+    if request.method == 'POST':
+        test_type = request.POST.get('test_type', 'success')
+        
+        # Prepare failure scenarios
+        failure_scenarios = {
+            'reserve_seat': request.POST.get('fail_reserve_seat') == 'true',
+            'deduct_loyalty_points': request.POST.get('fail_deduct_points') == 'true',
+            'process_payment': request.POST.get('fail_payment') == 'true',
+            'confirm_booking': request.POST.get('fail_confirm') == 'true'
+        }
+        
+        # For success scenario, clear all failures
+        if test_type == 'success':
+            failure_scenarios = {}
+        
+        # Prepare booking data
+        booking_data = {
+            'flight_id': 123,
+            'user_id': 1,
+            'total_fare': 500.00,
+            'loyalty_points_to_use': 1000,
+            'payment_method': 'card',
+            'passengers': [
+                {
+                    'first_name': 'John',
+                    'last_name': 'Test',
+                    'gender': 'male'
+                }
+            ]
+        }
+        
+        # Execute enhanced SAGA
+        orchestrator = EnhancedBookingSAGAOrchestrator()
+        result = orchestrator.start_booking_saga(booking_data, failure_scenarios=failure_scenarios)
+        
+        # If failure, redirect to failure page
+        if not result.get('success'):
+            return render(request, 'flight/saga_failure_result.html', {
+                'result': result,
+                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            })
+    
+    return render(request, 'flight/saga_test.html', {'result': result})
 
 
 def handle_counter_payment(request, ticket_id, t2, ticket2_id, points_to_use):

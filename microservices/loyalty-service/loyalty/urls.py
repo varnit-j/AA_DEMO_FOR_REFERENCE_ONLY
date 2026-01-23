@@ -1,8 +1,12 @@
 from django.contrib import admin
 from django.urls import path
-from . import views, saga_views, saga_compensation
+from . import views, saga_views
+
+from . import saga_views
 
 urlpatterns = [
+    path('award-miles/', saga_views.award_miles, name='award_miles'),
+    path('reverse-miles/', saga_views.reverse_miles, name='reverse_miles'),
     path('admin/', admin.site.urls),
     
     # Main loyalty endpoints
@@ -19,5 +23,5 @@ urlpatterns = [
     
     # SAGA endpoints
     path('api/saga/award-miles/', saga_views.award_miles, name='saga_award_miles'),
-    path('api/saga/reverse-miles/', saga_compensation.reverse_miles, name='saga_reverse_miles'),
+    path('api/saga/reverse-miles/', saga_views.reverse_miles, name='saga_reverse_miles'),
 ]

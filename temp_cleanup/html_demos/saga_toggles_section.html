@@ -1,0 +1,106 @@
+<!-- SAGA Failure Simulation Section -->
+<div class="saga-demo-section" style="margin-top: 20px !important; padding: 15px !important; background-color: #fff3cd !important; border: 2px solid #ffeaa7 !important; border-radius: 8px !important; display: block !important; visibility: visible !important; z-index: 1000 !important;">
+    <h5 style="color: #856404 !important; margin-bottom: 15px !important; background: none !important; -webkit-text-fill-color: #856404 !important;">🔧 SAGA Demo Controls</h5>
+    <p style="font-size: 12px !important; color: #856404 !important; margin-bottom: 15px !important;">
+        Toggle switches to simulate transaction failures and demonstrate SAGA compensation
+    </p>
+    <hr style="border-color: #ffeaa7 !important;">
+    
+    <!-- Reserve Seat Failure -->
+    <div class="form-check" style="margin-bottom: 10px;">
+        <input class="form-check-input" type="checkbox" name="simulate_reserveseat_fail" id="simulateReserveSeatFail">
+        <label class="form-check-label" for="simulateReserveSeatFail" style="font-size: 13px; color: #856404;">
+            <strong>Simulate Seat Reservation Failure</strong>
+            <br><small>Fails at step 1 - no compensation needed</small>
+        </label>
+    </div>
+    
+    <!-- Payment Authorization Failure -->
+    <div class="form-check" style="margin-bottom: 10px;">
+        <input class="form-check-input" type="checkbox" name="simulate_authorizepayment_fail" id="simulatePaymentFail">
+        <label class="form-check-label" for="simulatePaymentFail" style="font-size: 13px; color: #856404;">
+            <strong>Simulate Payment Authorization Failure</strong>
+            <br><small>Fails at step 2 - compensates seat reservation</small>
+        </label>
+    </div>
+    
+    <!-- Miles Award Failure -->
+    <div class="form-check" style="margin-bottom: 10px;">
+        <input class="form-check-input" type="checkbox" name="simulate_awardmiles_fail" id="simulateMilesFail">
+        <label class="form-check-label" for="simulateMilesFail" style="font-size: 13px; color: #856404;">
+            <strong>Simulate Miles Award Failure</strong>
+            <br><small>Fails at step 3 - compensates payment & seat</small>
+        </label>
+    </div>
+    
+    <!-- Booking Confirmation Failure -->
+    <div class="form-check" style="margin-bottom: 15px;">
+        <input class="form-check-input" type="checkbox" name="simulate_confirmbooking_fail" id="simulateBookingFail">
+        <label class="form-check-label" for="simulateBookingFail" style="font-size: 13px; color: #856404;">
+            <strong>Simulate Booking Confirmation Failure</strong>
+            <br><small>Fails at step 4 - compensates all previous steps</small>
+        </label>
+    </div>
+    
+    <div style="font-size: 11px; color: #856404; font-style: italic;">
+        💡 Select one failure type to see SAGA compensation in action
+    </div>
+    
+    <!-- Demo Execution Button -->
+    <div style="margin-top: 15px; text-align: center;">
+        <button id="runSagaDemo" onclick="runSelectedDemo()" style="background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+            🚀 Run SAGA Demo
+        </button>
+    </div>
+</div>
+
+<!-- SAGA Steps Display Container -->
+<div id="saga-steps-container" style="margin-top: 20px; display: none;">
+    <h5 style="color: #495057; margin-bottom: 15px;">📊 SAGA Transaction Steps</h5>
+    <div id="saga-steps" style="background: #ffffff; padding: 15px; border: 2px solid #dee2e6; border-radius: 8px;">
+        <!-- Steps will be populated by JavaScript -->
+    </div>
+</div>
+
+<script>
+function runSelectedDemo() {
+    // Find which checkbox is selected
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="simulate_"]');
+    let selectedFailure = null;
+    
+    checkboxes.forEach(checkbox => {
+        if (checkbox.checked) {
+            selectedFailure = checkbox.name;
+        }
+    });
+    
+    if (!selectedFailure) {
+        alert('Please select a failure type to simulate!');
+        return;
+    }
+    
+    // Show the steps container
+    document.getElementById('saga-steps-container').style.display = 'block';
+    
+    // Run the demonstration
+    demonstrateSagaSteps(selectedFailure);
+}
+
+// Ensure only one checkbox is selected at a time
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('input[type="checkbox"][name^="simulate_"]');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                // Uncheck all other checkboxes
+                checkboxes.forEach(other => {
+                    if (other !== this) {
+                        other.checked = false;
+                    }
+                });
+            }
+        });
+    });
+});
+</script>
