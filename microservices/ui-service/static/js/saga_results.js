@@ -139,15 +139,15 @@ function displayResultPageLogs(failureType) {
         const step = Object.values(SAGA_STEPS).find(s => s.step_number === i);
         if (step) {
             const stepTime = new Date(currentTime.getTime() + (i * 1000));
-            logs.push(createLogEntry(stepTime, step.service, 'INFO', `${step.icon} ${step.name} step initiated for correlation_id: 90ce528c`));
-            logs.push(createLogEntry(new Date(stepTime.getTime() + 500), step.service, 'SUCCESS', `✅ ${step.name} successful for 90ce528c`));
+            logs.push(createLogEntry(stepTime, step.service, 'INFO', `${step.icon} ${step.name} step initiated for correlation_id: ${getUrlParameter('correlation_id') || '5ad32d0b-0117-49f5-820e-d2ad5a282255'}`));
+            logs.push(createLogEntry(new Date(stepTime.getTime() + 500), step.service, 'SUCCESS', `✅ ${step.name} successful for ${getUrlParameter('correlation_id') || '5ad32d0b-0117-49f5-820e-d2ad5a282255'}`));
         }
     }
     
     // Add failed step
     const failTime = new Date(currentTime.getTime() + (failedStep.step_number * 1000));
-    logs.push(createLogEntry(failTime, failedStep.service, 'INFO', `${failedStep.icon} ${failedStep.name} step initiated for correlation_id: 90ce528c`));
-    logs.push(createLogEntry(new Date(failTime.getTime() + 500), failedStep.service, 'ERROR', `❌ Simulated failure in ${failedStep.name} for 90ce528c`));
+    logs.push(createLogEntry(failTime, failedStep.service, 'INFO', `${failedStep.icon} ${failedStep.name} step initiated for correlation_id: ${getUrlParameter('correlation_id') || '5ad32d0b-0117-49f5-820e-d2ad5a282255'}`));
+    logs.push(createLogEntry(new Date(failTime.getTime() + 500), failedStep.service, 'ERROR', `❌ Simulated failure in ${failedStep.name} for ${getUrlParameter('correlation_id') || '5ad32d0b-0117-49f5-820e-d2ad5a282255'}`));
     
     // Add compensation header
     logs.push(`<div style="background: #ffeaa7; color: #856404; padding: 8px; border-radius: 5px; margin: 10px 0; font-weight: bold;">
@@ -165,6 +165,32 @@ function displayResultPageLogs(failureType) {
     }
     
     container.innerHTML = logs.join('');
+}
+
+/**
+ * Create a log entry HTML
+ */
+function createLogEntry(timestamp, service, level, message) {
+    const timeStr = timestamp.toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Calcutta',
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    }) + ' IST';
+    
+    const levelColor = {
+        'INFO': '#17a2b8',
+        'SUCCESS': '#28a745',
+        'ERROR': '#dc3545',
+        'WARNING': '#ffc107'
+    }[level] || '#6c757d';
+    
+    return `<div style="margin-bottom: 5px; padding: 3px 0; border-bottom: 1px solid #343a40;">
+        <span style="color: #6c757d; margin-right: 10px;">[${timeStr}]</span>
+        <span style="color: ${levelColor}; font-weight: bold; margin-right: 10px;">[${service}]</span>
+        <span>${message}</span>
+    </div>`;
 }
 
 // Initialize when DOM is loaded
