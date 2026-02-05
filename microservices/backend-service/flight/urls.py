@@ -41,5 +41,9 @@ if SAGA_AVAILABLE:
         # SAGA Management endpoints
         path('saga/status/<str:correlation_id>/', saga_views_complete.get_saga_status, name='saga_status'),
         path('saga/logs/<str:correlation_id>/', saga_views_complete.get_saga_logs, name='saga_logs'),
+        path('saga/create-demo-log/', saga_views_complete.create_demo_log, name='create_demo_log'),
         path('saga/demo-failure/', saga_views_complete.demo_saga_failure, name='saga_demo_failure'),
+
+        # Async start (may not exist yet; UI will fall back)
+        path('saga/start-booking-async/', getattr(saga_views_complete, 'start_booking_saga_async', saga_views_complete.start_booking_saga), name='saga_start_booking_async'),
     ]

@@ -212,3 +212,48 @@ class SagaMilesAward(models.Model):
     
     def __str__(self):
         return f"Miles {self.correlation_id} - {self.miles_awarded} miles - {self.status}"
+
+
+class SagaLogEntry(models.Model):
+    """Database model for persistent SAGA execution logs"""
+    LOG_LEVEL_CHOICES = [
+        ('info', 'Info'),
+        ('success', 'Success'),
+        ('error', 'Error'),
+        ('warning', 'Warning'),
+        ('compensation', 'Compensation')
+    ]
+    
+    correlation_id = models.CharField(max_length=50, db_index=True)
+    step_name = models.CharField(max_length=50)
+    service = models.CharField(max_length=50)
+    log_level = models.CharField(max_length=15, choices=LOG_LEVEL_CHOICES, default='info')
+    message = models.TextField()
+    is_compensation = models.BooleanField(default=False)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['timestamp']
+        indexes = [
+            models.Index(fields=['correlation_id', 'timestamp']),
+        ]
+    
+    def __str__(self):
+        return f"[{self.timestamp}] {self.service} - {self.step_name}: {self.message[:50]}"
+    
+    def to_dict(self):
+        """Convert to dictionary format for API responses"""
+        from django.utils import timezone
+        import pytz
+        
+        return {
+            'correlation_id': self.correlation_id,
+            'step_name': self.step_name,
+            'service': self.service,
+            'log_level': self.log_level,
+            'message': self.message,
+            'timestamp': self.timestamp.astimezone(pytz.timezone('Asia/Calcutta')).strftime('%H:%M:%S IST'),
+            'timestamp_utc': self.timestamp.strftime('%H:%M:%S UTC'),
+            'timestamp_full': self.timestamp.astimezone(pytz.timezone('Asia/Calcutta')).strftime('%Y-%m-%d %H:%M:%S IST'),
+            'is_compensation': self.is_compensation
+        }

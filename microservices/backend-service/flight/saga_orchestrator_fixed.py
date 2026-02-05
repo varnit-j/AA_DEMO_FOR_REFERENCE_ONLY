@@ -37,11 +37,21 @@ class BookingOrchestrator:
         correlation_id = str(uuid.uuid4())
         logger.info(f"[SAGA] Starting booking SAGA with correlation_id: {correlation_id}")
         
+        # DIAGNOSTIC: Add comprehensive logging for debugging missing logs
+        logger.info(f"[SAGA ORCHESTRATOR DEBUG] ===== SAGA TRANSACTION START =====")
+        logger.info(f"[SAGA ORCHESTRATOR DEBUG] Correlation ID: {correlation_id}")
+        logger.info(f"[SAGA ORCHESTRATOR DEBUG] Flight ID: {booking_data.get('flight_id')}")
+        logger.info(f"[SAGA ORCHESTRATOR DEBUG] User ID: {booking_data.get('user_id')}")
+        
         # Add initial log entry
         saga_log_storage.add_log(
-            correlation_id, "SAGA_START", "ORCHESTRATOR", "info",
-            f"SAGA transaction initiated for flight {booking_data.get('flight_id')}"
+            correlation_id, "SAGA_START", "UI Service", "info",
+            f"📝 Demo SAGA transaction created for correlation_id: {correlation_id}"
         )
+        
+        # DIAGNOSTIC: Verify initial log was added
+        initial_logs = saga_log_storage.get_logs(correlation_id)
+        logger.info(f"[SAGA ORCHESTRATOR DEBUG] Initial logs count after SAGA_START: {len(initial_logs)}")
         
         logger.info(f"[PAYMENT_FLOW_DEBUG] ===== SAGA ORCHESTRATOR ENTRY =====")
         logger.info(f"[PAYMENT_FLOW_DEBUG] Received booking_data keys: {list(booking_data.keys())}")
@@ -54,11 +64,19 @@ class BookingOrchestrator:
             for i, step in enumerate(self.steps):
                 logger.info(f"[SAGA] Executing step {i+1}/{len(self.steps)}: {step.name}")
                 
-                # Log step initiation
+                # DIAGNOSTIC: Add comprehensive step logging
+                logger.info(f"[SAGA ORCHESTRATOR DEBUG] ===== STEP {i+1}: {step.name} =====")
+                logger.info(f"[SAGA ORCHESTRATOR DEBUG] Step URL: {step.action_url}")
+                
+                # Log step initiation with proper service name
                 saga_log_storage.add_log(
-                    correlation_id, step.name, "ORCHESTRATOR", "info",
-                    f"Step {i+1}: {step.name} initiated"
+                    correlation_id, step.name, f"{step.name} Service", "info",
+                    f"💺 {step.name} step initiated for correlation_id: {correlation_id}"
                 )
+                
+                # DIAGNOSTIC: Check logs count after step initiation
+                current_logs = saga_log_storage.get_logs(correlation_id)
+                logger.info(f"[SAGA ORCHESTRATOR DEBUG] Logs count after {step.name} initiation: {len(current_logs)}")
                 
                 logger.info(f"[PAYMENT_FLOW_DEBUG] ===== SAGA STEP {i+1}: {step.name} =====")
                 logger.info(f"[PAYMENT_FLOW_DEBUG] Step URL: {step.action_url}")
@@ -75,25 +93,58 @@ class BookingOrchestrator:
                 
                 result = self._execute_step(step, step_data)
                 
+                # DIAGNOSTIC: Log step execution result
+                logger.info(f"[SAGA ORCHESTRATOR DEBUG] Step {step.name} result: {result}")
+                
                 if result.get("success"):
                     completed_steps.append(step)
                     logger.info(f"[SAGA] Step {step.name} completed successfully")
                     
-                    # Log step success
+                    # Log step success with detailed information from the actual response
+                    step_message = result.get('message', f'Step {step.name} completed successfully')
                     saga_log_storage.add_log(
-                        correlation_id, step.name, "ORCHESTRATOR", "success",
-                        f"Step {step.name} completed successfully"
+                        correlation_id, step.name, f"{step.name} Service", "success",
+                        f"✅ {step_message}"
                     )
+                    
+                    # DIAGNOSTIC: Check logs count after step success
+                    current_logs = saga_log_storage.get_logs(correlation_id)
+                    logger.info(f"[SAGA ORCHESTRATOR DEBUG] Logs count after {step.name} success: {len(current_logs)}")
+                    
+                    # Add specific step details based on step type
+                    if step.name == "ReserveSeat" and result.get('reservation_id'):
+                        saga_log_storage.add_log(
+                            correlation_id, step.name, "Backend Service", "info",
+                            f"💺 Created reservation record: {result.get('reservation_id')}"
+                        )
+                    elif step.name == "AuthorizePayment" and result.get('authorization_id'):
+                        saga_log_storage.add_log(
+                            correlation_id, step.name, "Payment Service", "info",
+                            f"💳 Authorization ID: {result.get('authorization_id')} - Amount: ${result.get('amount', 0)}"
+                        )
+                    elif step.name == "AwardMiles" and result.get('miles_awarded'):
+                        saga_log_storage.add_log(
+                            correlation_id, step.name, "Loyalty Service", "info",
+                            f"🏆 Miles awarded: {result.get('miles_awarded')} - Balance: {result.get('original_balance')} -> {result.get('new_balance')}"
+                        )
                 else:
                     logger.error(f"[SAGA] Step {step.name} failed: {result.get('error', 'Unknown error')}")
                     
-                    # Log step failure
+                    # Log step failure with clear indication
                     saga_log_storage.add_log(
                         correlation_id, step.name, "ORCHESTRATOR", "error",
-                        f"Step {step.name} failed: {result.get('error', 'Unknown error')}"
+                        f"❌ Step {step.name} failed: {result.get('error', 'Unknown error')}"
                     )
                     
+                    # DIAGNOSTIC: Check logs count after step failure
+                    current_logs = saga_log_storage.get_logs(correlation_id)
+                    logger.info(f"[SAGA ORCHESTRATOR DEBUG] Logs count after {step.name} failure: {len(current_logs)}")
+                    
                     compensation_result = self._execute_compensation(completed_steps, correlation_id, booking_data)
+                    
+                    # DIAGNOSTIC: Check logs count after compensation
+                    final_logs = saga_log_storage.get_logs(correlation_id)
+                    logger.info(f"[SAGA ORCHESTRATOR DEBUG] Final logs count after compensation: {len(final_logs)}")
                     
                     # Create failed booking record for user to see in their bookings
                     error_message = f"SAGA failed at step {step.name}: {result.get('error', 'Unknown error')}"
@@ -182,11 +233,19 @@ class BookingOrchestrator:
         logger.info(f"[SAGA COMPENSATION] 🔄 Starting compensation for {len(completed_steps)} completed steps")
         logger.info(f"[SAGA COMPENSATION] 📋 Steps to compensate: {[step.name for step in completed_steps]}")
         
+        # DIAGNOSTIC: Check logs before compensation
+        pre_comp_logs = saga_log_storage.get_logs(correlation_id)
+        logger.info(f"[SAGA ORCHESTRATOR DEBUG] Logs count before compensation: {len(pre_comp_logs)}")
+        
         # Log compensation initiation
         saga_log_storage.add_log(
             correlation_id, "COMPENSATION", "ORCHESTRATOR", "warning",
-            f"Starting compensation for {len(completed_steps)} completed steps"
+            f"🔄 Starting compensation for {len(completed_steps)} completed steps"
         )
+        
+        # DIAGNOSTIC: Check logs after compensation initiation
+        post_init_logs = saga_log_storage.get_logs(correlation_id)
+        logger.info(f"[SAGA ORCHESTRATOR DEBUG] Logs count after compensation initiation: {len(post_init_logs)}")
         
         compensation_results = []
         for step in reversed(completed_steps):
@@ -227,11 +286,33 @@ class BookingOrchestrator:
                     result = response.json()
                     logger.info(f"[SAGA COMPENSATION] ✅ Compensation for {step.name} successful: {result.get('message', 'No message')}")
                     
-                    # Log successful compensation
+                    # Log detailed compensation with actual results
+                    comp_message = result.get('message', f'Compensation for {step.name} completed successfully')
                     saga_log_storage.add_log(
-                        correlation_id, f"COMPENSATE_{step.name}", "ORCHESTRATOR", "success",
-                        f"Compensation for {step.name} completed successfully"
+                        correlation_id, f"COMPENSATE_{step.name}", f"{step.name} Compensation", "success",
+                        f"🔄 {comp_message}", is_compensation=True
                     )
+                    
+                    # DIAGNOSTIC: Check logs count after each compensation
+                    comp_logs = saga_log_storage.get_logs(correlation_id)
+                    logger.info(f"[SAGA ORCHESTRATOR DEBUG] Logs count after {step.name} compensation: {len(comp_logs)}")
+                    
+                    # Add specific compensation details
+                    if step.name == "AwardMiles" and result.get('miles_reversed'):
+                        saga_log_storage.add_log(
+                            correlation_id, f"COMPENSATE_{step.name}", "Loyalty Compensation", "info",
+                            f"↩️ Miles reversed: {result.get('miles_reversed')} - Balance: {result.get('original_balance')} -> {result.get('new_balance')}", is_compensation=True
+                        )
+                    elif step.name == "AuthorizePayment" and result.get('authorization_id'):
+                        saga_log_storage.add_log(
+                            correlation_id, f"COMPENSATE_{step.name}", "Payment Compensation", "info",
+                            f"💳 Cancelled authorization: {result.get('authorization_id')} - Amount: ${result.get('amount', 0)}", is_compensation=True
+                        )
+                    elif step.name == "ReserveSeat":
+                        saga_log_storage.add_log(
+                            correlation_id, f"COMPENSATE_{step.name}", "Backend Compensation", "info",
+                            f"💺 Seat reservation cancelled successfully", is_compensation=True
+                        )
                     
                     compensation_results.append({
                         "step": step.name,
@@ -245,7 +326,7 @@ class BookingOrchestrator:
                     # Log failed compensation
                     saga_log_storage.add_log(
                         correlation_id, f"COMPENSATE_{step.name}", "ORCHESTRATOR", "error",
-                        f"Compensation for {step.name} failed: HTTP {response.status_code}"
+                        f"Compensation for {step.name} failed: HTTP {response.status_code}", is_compensation=True
                     )
                     
                     compensation_results.append({

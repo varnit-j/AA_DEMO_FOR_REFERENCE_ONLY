@@ -16,8 +16,6 @@ def convert_utc_to_local(date_string, target_timezone='Asia/Calcutta'):
         dict with converted times and debug info
     """
     try:
-        print(f"[TIME_DEBUG] Converting date: {date_string}")
-        
         # Parse the date string
         dt = None
         if len(date_string) == 16:  # Format: 2026-01-23 08:00
@@ -46,11 +44,9 @@ def convert_utc_to_local(date_string, target_timezone='Asia/Calcutta'):
             'success': True
         }
         
-        print(f"[TIME_DEBUG] Conversion successful: {result['local_with_tz']}")
         return result
         
     except Exception as e:
-        print(f"[TIME_DEBUG] Error converting date {date_string}: {e}")
         return {
             'original': date_string,
             'utc': date_string + ' (UTC)',

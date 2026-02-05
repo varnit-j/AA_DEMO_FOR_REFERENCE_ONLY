@@ -41,29 +41,82 @@ class SagaLogStorage:
     
     def add_log(self, correlation_id: str, step_name: str, service: str,
                 log_level: str, message: str, is_compensation: bool = False):
-        """Add a log entry for a SAGA transaction"""
-        if correlation_id not in self.logs:
-            self.logs[correlation_id] = []
-        
-        log_entry = SagaLogEntry(correlation_id, step_name, service, log_level, message, is_compensation)
-        self.logs[correlation_id].append(log_entry)
-        
-        logger.info(f"[SAGA LOG] {service} - {step_name}: {message}")
-        logger.debug(f"[SAGA DEBUG] Log added for correlation_id={correlation_id}, total_logs={len(self.logs[correlation_id])}")
-        logger.debug(f"[SAGA DEBUG] Log added for correlation_id={correlation_id}, total_logs={len(self.logs[correlation_id])}")
+        """Add a log entry for a SAGA transaction - now persisted to database"""
+        try:
+            # Import here to avoid circular imports
+            from .models import SagaLogEntry as SagaLogModel
+            
+            # Create database record
+            log_entry = SagaLogModel.objects.create(
+                correlation_id=correlation_id,
+                step_name=step_name,
+                service=service,
+                log_level=log_level,
+                message=message,
+                is_compensation=is_compensation
+            )
+            
+            # Enhanced logging with compensation indicator
+            comp_indicator = " [COMPENSATION]" if is_compensation else ""
+            logger.info(f"[SAGA LOG DB] {service} - {step_name}{comp_indicator}: {message}")
+            logger.info(f"[SAGA LOG DB] ✅ Persisted log entry ID {log_entry.id} to database")
+            
+            # BACKWARD COMPATIBILITY: Also store in memory for immediate access
+            if correlation_id not in self.logs:
+                self.logs[correlation_id] = []
+            
+            # Create in-memory entry for backward compatibility
+            memory_entry = SagaLogEntry(correlation_id, step_name, service, log_level, message, is_compensation)
+            self.logs[correlation_id].append(memory_entry)
+            
+        except Exception as e:
+            logger.error(f"[SAGA LOG DB] ❌ Failed to persist log to database: {e}")
+            # Fallback to memory-only storage
+            if correlation_id not in self.logs:
+                self.logs[correlation_id] = []
+            
+            log_entry = SagaLogEntry(correlation_id, step_name, service, log_level, message, is_compensation)
+            self.logs[correlation_id].append(log_entry)
+            
+            comp_indicator = " [COMPENSATION]" if is_compensation else ""
+            logger.info(f"[SAGA LOG FALLBACK] {service} - {step_name}{comp_indicator}: {message}")
     
     def get_logs(self, correlation_id: str, include_compensation: bool = True) -> List[Dict[str, Any]]:
-        """Get all logs for a SAGA transaction"""
+        """Get all logs for a SAGA transaction - now from database with fallback"""
+        logger.info(f"[SAGA LOG DB] ===== GET_LOGS REQUEST =====")
+        logger.info(f"[SAGA LOG DB] Requested correlation_id: {correlation_id}")
+        
+        try:
+            # Try database first
+            from .models import SagaLogEntry as SagaLogModel
+            
+            query = SagaLogModel.objects.filter(correlation_id=correlation_id)
+            if not include_compensation:
+                query = query.filter(is_compensation=False)
+            
+            db_logs = query.order_by('timestamp')
+            logs = [log.to_dict() for log in db_logs]
+            
+            if logs:
+                logger.info(f"[SAGA LOG DB] ✅ Found {len(logs)} logs in database")
+                return logs
+            else:
+                logger.warning(f"[SAGA LOG DB] ❌ No logs in database for {correlation_id}")
+                
+        except Exception as e:
+            logger.error(f"[SAGA LOG DB] Database query failed: {e}")
+        
+        # Fallback to memory storage
+        logger.info(f"[SAGA LOG DB] Falling back to memory storage")
         if correlation_id not in self.logs:
-            logger.debug(f"[SAGA DEBUG] No logs found for correlation_id={correlation_id}")
-            logger.debug(f"[SAGA DEBUG] No logs found for correlation_id={correlation_id}")
+            logger.warning(f"[SAGA LOG DB] ❌ Not found in memory either: {correlation_id}")
             return []
         
         logs = [
             log.to_dict() for log in self.logs[correlation_id]
             if include_compensation or not log.is_compensation
         ]
-        logger.debug(f"[SAGA DEBUG] Retrieved {len(logs)} logs for correlation_id={correlation_id}")
+        logger.info(f"[SAGA LOG DB] ✅ Found {len(logs)} logs in memory")
         return logs
     
     def clear_logs(self, correlation_id: str):

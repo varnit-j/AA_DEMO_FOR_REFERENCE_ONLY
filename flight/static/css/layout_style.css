@@ -67,7 +67,7 @@ body{
         margin-top: 20px;
         margin-bottom: 20px;
     }
-    .search-flight{
+    .trip-search-container{
         width: 80%!important;
         margin-left: auto;
         margin-right: auto;
@@ -79,12 +79,19 @@ body{
         margin-top: 40px;
         margin-bottom: 45px;
     }
-    .search-flight{
+    .trip-search-container{
         width: 85%!important;
+    }
+    .horizontal-form-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+    .form-field {
+        min-width: 100%;
     }
 }
 @media (max-width: 652px){
-    .search-flight{
+    .trip-search-container{
         width: 99%!important;
     }
 }
@@ -92,14 +99,17 @@ body{
     .section{
         padding: 30px 30px;
     }
-    .search-flight{
+    .trip-search-container{
         width: 100%!important;
-        padding: 40px 30px !important;
+        height: 70vh;
+    }
+    .search-flight{
+        padding: 20px 30px !important;
     }
 }
 @media (max-width: 430px){
     .search-flight{
-        padding: 35px 18px !important;
+        padding: 15px 18px !important;
     }
 }
 @media (max-width: 376px){
@@ -111,8 +121,11 @@ body{
         margin-top: 15px;
         margin-bottom: 25px;
     }
+    .trip-search-container{
+        height: 60vh;
+    }
     .search-flight{
-        padding: 35px 10px !important;
+        padding: 15px 10px !important;
     }
     .footer-content{
         display: block!important;
@@ -141,19 +154,115 @@ body{
     }
 }
 @media (max-width: 280px){
+    .trip-search-container{
+        height: 50vh;
+    }
     .search-flight{
-        padding: 30px 0px !important;
+        padding: 10px 5px !important;
     }
 }
 
-.search-flight{
-    padding: 50px 40px;
-    background-color: #fff;
+/* Trip Search Container - Split Layout */
+.trip-search-container {
     width: 40%;
+    height: 80vh;
+    background-color: #fff;
     border-radius: 7px;
     box-shadow: rgba(101, 119, 134, 0.2) 0px 0px 15px, rgba(101, 119, 134, 0.15) 0px 0px 3px 1px;
     display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
+
+/* Aircraft Image Section - Top Half */
+.aircraft-image-section {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f8f9fa;
+    padding: 20px;
+}
+
+.aircraft-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 5px;
+}
+
+/* Search Flight Section - Bottom Half */
+.search-flight{
+    flex: 1;
+    padding: 30px 40px;
+    background-color: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+/* Form Layout Styles */
+.search-flight-form {
+    width: 100%;
+}
+
+.align-items-center {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.trip-type-row {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    margin-bottom: 10px;
+}
+
+.horizontal-form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: end;
+    justify-content: space-between;
+}
+
+.form-field {
+    display: flex;
+    flex-direction: column;
+    min-width: 120px;
+    flex: 1;
+}
+
+.form-field label {
+    margin-bottom: 5px;
+    font-size: 0.9em;
+    color: rgb(100,100,100);
+    font-weight: 500;
+}
+
+.form-field input,
+.form-field select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.form-field button {
+    padding: 10px 20px;
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.form-field button:hover {
+    background-color: #c82333;
+}
+
 .search-flight .input-row{
     margin: 10px;
 }

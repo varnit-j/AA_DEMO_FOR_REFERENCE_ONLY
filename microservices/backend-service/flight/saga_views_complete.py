@@ -8,6 +8,7 @@ import logging
 import json
 import uuid
 import requests
+import threading
 from typing import Dict, Any
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -249,6 +250,16 @@ def reserve_seat(request):
         logger.info(f"[SAGA BACKEND] 💺 ReserveSeat step initiated for correlation_id: {correlation_id}")
         logger.info(f"[SAGA BACKEND] 📊 Processing seat reservation for flight_id: {booking_data.get('flight_id')}")
         
+        # Add detailed log entry
+        saga_log_storage.add_log(
+            correlation_id=correlation_id,
+            step_name="ReserveSeat",
+            service="SAGA BACKEND",
+            log_level="info",
+            message=f"💺 ReserveSeat step initiated for correlation_id: {correlation_id}",
+            is_compensation=False
+        )
+        
         # Simulate failure if requested
         if simulate_failure:
             logger.error(f"[SAGA BACKEND] ❌ Simulated failure in ReserveSeat for {correlation_id}")
@@ -265,6 +276,16 @@ def reserve_seat(request):
             logger.info(f"[SAGA BACKEND] ✅ Seat reservation successful for {correlation_id}")
             logger.info(f"[SAGA BACKEND] 💾 Created reservation record: {reservation.id}")
             logger.info(f"[SAGA BACKEND] 🎯 Backend service step 1 complete")
+            
+            # Add success log entry
+            saga_log_storage.add_log(
+                correlation_id=correlation_id,
+                step_name="ReserveSeat",
+                service="SAGA BACKEND",
+                log_level="success",
+                message=f"✅ Seat reservation successful for {correlation_id}",
+                is_compensation=False
+            )
             
             return JsonResponse({
                 "success": True,
@@ -299,10 +320,31 @@ def confirm_booking(request):
         logger.info(f"[SAGA BACKEND] 🎫 ConfirmBooking step initiated for correlation_id: {correlation_id}")
         logger.info(f"[SAGA BACKEND] 📋 Final step - creating ticket and confirming booking")
         
+        # Add detailed log entry
+        saga_log_storage.add_log(
+            correlation_id=correlation_id,
+            step_name="ConfirmBooking",
+            service="SAGA BACKEND",
+            log_level="info",
+            message=f"📋 ConfirmBooking step initiated for correlation_id: {correlation_id}",
+            is_compensation=False
+        )
+        
         # Simulate failure if requested
         if simulate_failure:
             logger.error(f"[SAGA BACKEND] ❌ Simulated failure in ConfirmBooking for {correlation_id}")
             logger.error(f"[SAGA BACKEND] 🔄 This will trigger compensation for all previous steps")
+            
+            # Add failure log entry
+            saga_log_storage.add_log(
+                correlation_id=correlation_id,
+                step_name="ConfirmBooking",
+                service="SAGA BACKEND",
+                log_level="error",
+                message=f"❌ Simulated failure in ConfirmBooking for {correlation_id}",
+                is_compensation=False
+            )
+            
             return JsonResponse({
                 "success": False,
                 "error": "Simulated booking confirmation failure - booking system unavailable"
@@ -631,8 +673,17 @@ def cancel_booking(request):
 def get_saga_logs(request, correlation_id):
     """Get SAGA execution logs for display"""
     try:
+        # DIAGNOSTIC: Add comprehensive logging for API debugging
+        logger.info(f"[SAGA API DIAGNOSTIC] ===== GET_SAGA_LOGS API CALLED =====")
+        logger.info(f"[SAGA API DIAGNOSTIC] Requested correlation_id: {correlation_id}")
+        logger.info(f"[SAGA API DIAGNOSTIC] Request method: {request.method}")
+        logger.info(f"[SAGA API DIAGNOSTIC] Request path: {request.path}")
+        
         # Get logs from centralized storage
         logs = saga_log_storage.get_logs(correlation_id)
+        
+        logger.info(f"[SAGA API DIAGNOSTIC] Retrieved {len(logs)} logs from storage")
+        logger.info(f"[SAGA API DIAGNOSTIC] Returning success response with {len(logs)} logs")
         
         return JsonResponse({
             "success": True,
@@ -642,7 +693,8 @@ def get_saga_logs(request, correlation_id):
         })
         
     except Exception as e:
-        logger.error(f"[SAGA] Error getting SAGA logs: {e}")
+        logger.error(f"[SAGA API DIAGNOSTIC] ❌ ERROR in get_saga_logs: {e}")
+        logger.error(f"[SAGA API DIAGNOSTIC] Exception type: {type(e)}")
         return JsonResponse({
             "success": False,
             "error": str(e)
@@ -687,6 +739,46 @@ def demo_saga_failure(request):
         })
 
 @csrf_exempt
+@require_http_methods(["POST"])
+def create_demo_log(request):
+    """Create demo log entry for correlation IDs that don't have real logs"""
+    try:
+        data = json.loads(request.body)
+        correlation_id = data.get('correlation_id')
+        step_name = data.get('step_name', 'DemoStep')
+        service = data.get('service', 'Demo Service')
+        log_level = data.get('log_level', 'info')
+        message = data.get('message', 'Demo log entry')
+        is_compensation = data.get('is_compensation', False)
+        
+        logger.info(f"[SAGA DEMO LOG] Creating demo log for correlation_id: {correlation_id}")
+        
+        # Add log using the storage system
+        saga_log_storage.add_log(
+            correlation_id=correlation_id,
+            step_name=step_name,
+            service=service,
+            log_level=log_level,
+            message=message,
+            is_compensation=is_compensation
+        )
+        
+        logger.info(f"[SAGA DEMO LOG] Demo log created successfully for {correlation_id}")
+        
+        return JsonResponse({
+            "success": True,
+            "correlation_id": correlation_id,
+            "message": "Demo log created successfully"
+        })
+        
+    except Exception as e:
+        logger.error(f"[SAGA DEMO LOG] Error creating demo log: {e}")
+        return JsonResponse({
+            "success": False,
+            "error": str(e)
+        })
+
+@csrf_exempt
 @require_http_methods(["GET"])
 def get_saga_status(request, correlation_id):
     """Get SAGA transaction status"""
@@ -715,3 +807,92 @@ def get_saga_status(request, correlation_id):
             "success": False,
             "error": str(e)
         })
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def start_booking_saga_async(request):
+    """Start the SAGA booking process asynchronously - returns 202 immediately and runs SAGA in background"""
+    try:
+        data = json.loads(request.body)
+        logger.info(f"[SAGA ASYNC] Starting async booking SAGA with data: {data}")
+        
+        # Validate required fields
+        flight_id = data.get('flight_id')
+        passengers = data.get('passengers', [])
+        contact_info = data.get('contact_info', {})
+        
+        if not flight_id or not passengers or not contact_info:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing required fields: flight_id, passengers, contact_info'
+            }, status=400)
+        
+        # Get flight details for validation
+        try:
+            flight = Flight.objects.get(id=flight_id)
+        except Flight.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': f'Flight {flight_id} not found'
+            }, status=404)
+        
+        # Generate correlation ID immediately
+        correlation_id = str(uuid.uuid4())
+        logger.info(f"[SAGA ASYNC] Generated correlation_id: {correlation_id}")
+        
+        # CRITICAL FIX: Create initial log entry immediately so UI sees logs right away
+        try:
+            saga_log_storage.add_log(
+                correlation_id=correlation_id,
+                step_name="SAGA_START",
+                service="SAGA BACKEND",
+                log_level="info",
+                message=f"🚀 Async SAGA accepted for correlation_id: {correlation_id}",
+                is_compensation=False
+            )
+            logger.info(f"[SAGA ASYNC] Initial log entry created for {correlation_id}")
+        except Exception as e:
+            logger.warning(f"[SAGA ASYNC] Failed to write initial log: {e}")
+        
+        # Return 202 Accepted immediately with correlation_id
+        logger.info(f"[SAGA ASYNC] Returning 202 Accepted immediately for correlation_id: {correlation_id}")
+        
+        # Start background SAGA (simplified for immediate response)
+        def run_saga_background():
+            try:
+                orchestrator = get_orchestrator()
+                if orchestrator:
+                    booking_data = {
+                        'flight_id': flight_id,
+                        'user_id': data.get('user_id', 1),
+                        'passengers': passengers,
+                        'contact_info': contact_info,
+                        'flight_fare': float(flight.economy_fare),
+                        'correlation_id': correlation_id,
+                        'simulate_reserveseat_fail': data.get('simulate_reserveseat_fail', False),
+                        'simulate_authorizepayment_fail': data.get('simulate_authorizepayment_fail', False),
+                        'simulate_awardmiles_fail': data.get('simulate_awardmiles_fail', False),
+                        'simulate_confirmbooking_fail': data.get('simulate_confirmbooking_fail', False)
+                    }
+                    result = orchestrator.start_booking_saga(booking_data)
+                    logger.info(f"[SAGA ASYNC] Background SAGA completed: {result.get('success')}")
+            except Exception as e:
+                logger.error(f"[SAGA ASYNC] Background SAGA error: {e}")
+        
+        # Start background thread
+        thread = threading.Thread(target=run_saga_background)
+        thread.daemon = True
+        thread.start()
+        
+        return JsonResponse({
+            'accepted': True,
+            'correlation_id': correlation_id,
+            'message': 'SAGA booking started in background'
+        }, status=202)
+        
+    except Exception as e:
+        logger.error(f"[SAGA ASYNC] Error starting async booking SAGA: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)

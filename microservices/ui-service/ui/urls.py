@@ -29,6 +29,7 @@ urlpatterns = [
     path('about-us', views.about_us, name="aboutus"),
     path('aadvantage/dashboard', views.aadvantage_dashboard, name="aadvantage_dashboard"),
     path('saga/results', views.saga_results, name="saga_results"),
+    path('api/saga/logs/<str:correlation_id>/', views.proxy_saga_logs, name="proxy_saga_logs"),
 ]
 
 if settings.DEBUG:

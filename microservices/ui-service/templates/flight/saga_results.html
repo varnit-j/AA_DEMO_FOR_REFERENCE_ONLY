@@ -5,7 +5,6 @@
 {% block head %}
 <title>SAGA Transaction Failed | Flight Booking</title>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-<script type="text/javascript" src="{% static 'js/saga_results.js' %}"></script>
 <style>
     .saga-header { 
         background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); 
@@ -51,7 +50,7 @@
         padding: 20px;
         font-family: 'Courier New', monospace;
         font-size: 13px;
-        max-height: 400px;
+        max-height: 500px;
         overflow-y: auto;
         margin: 20px 0;
         border: 1px solid #495057;
@@ -70,6 +69,12 @@
     .log-level-success { color: #28a745; }
     .log-level-warning { color: #ffc107; }
     .log-level-compensation { color: #fd7e14; }
+    .loading-indicator {
+        text-align: center;
+        padding: 20px;
+        color: #6c757d;
+        font-style: italic;
+    }
 </style>
 {% endblock %}
 
@@ -83,154 +88,66 @@
                 <strong>Correlation ID:</strong> {{ correlation_id }}
             </div>
             
-            <!-- Action Buttons -->
-            <div class="row mt-4">
-                <div class="col-md-12 text-center">
-                    <h4>What would you like to do next?</h4>
-                    <div style="margin-top: 20px;">
-                        <a href="{% url 'index' %}" class="btn-custom" style="background: #6b7280; color: white;">
-                            <i class="fas fa-home"></i> Back to Home
-                        </a>
-                        <a href="{% url 'review' %}" class="btn-custom" style="background: #10b981; color: white;">
-                            <i class="fas fa-redo"></i> Try Booking Again
-                        </a>
+            <div class="container">
+                {% if correlation_id %}
+                    <!-- Real System Logs Section -->
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="status-card">
+                                <h4><i class="fas fa-terminal"></i> SAGA Transaction Logs</h4>
+                                <p>Detailed execution logs showing step-by-step processing and compensation:</p>
+                                
+                                <div class="log-container">
+                                    <div id="dynamic-saga-logs">
+                                        <div class="loading-indicator">
+                                            <i class="fas fa-spinner fa-spin"></i> Loading detailed transaction logs...
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                {% endif %}
             </div>
-            
-            <!-- Real System Logs Section -->
-            <div class="row mt-4">
-                <div class="col-md-12">
-                    <div class="status-card">
-                        <h4><i class="fas fa-terminal"></i> Real System Logs</h4>
-                        <p>Actual logs from microservices showing step execution and compensation:</p>
-                        
-                        <div class="log-container">
-                            {% if saga_logs %}
-                                {% for log in saga_logs %}
+        {% endif %}
+    </div>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const correlationId = '{{ correlation_id }}';
+        if (correlationId && correlationId !== 'unknown') {
+            fetch(`/api/saga/logs/${correlationId}/`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.logs) {
+                        const container = document.getElementById('dynamic-saga-logs');
+                        if (container) {
+                            container.innerHTML = `
+                                <div style="background: #28a745; color: white; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-weight: bold;">
+                                    📊 SAGA Transaction Logs - Correlation ID: ${correlationId}
+                                </div>
+                                <div style="background: #17a2b8; color: white; padding: 8px; border-radius: 5px; margin-bottom: 10px; font-size: 12px;">
+                                    🔄 Streaming logs in real-time... (${data.logs.length} entries)
+                                </div>
+                            `;
+                            
+                            data.logs.forEach(log => {
+                                const comp = log.is_compensation ? ' [COMPENSATION]' : '';
+                                const level = log.is_compensation ? 'compensation' : log.log_level;
+                                container.innerHTML += `
                                     <div class="log-entry">
-                                        <span class="log-timestamp">[{{ log.timestamp }}]</span>
-                                        <span class="log-level-{{ log.log_level }}">[{{ log.service }}]</span> {{ log.message }}
+                                        <span class="log-timestamp">[${log.timestamp}]</span>
+                                        <span class="log-level-${level}">[${log.service}${comp}]</span> ${log.message}
                                     </div>
-                                {% endfor %}
-                            {% else %}
-                                <!-- Dynamic logs will be populated by JavaScript based on failure type -->
-                                <div id="dynamic-saga-logs-placeholder" style="background: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; color: #6c757d;">
-                                    <div style="font-size: 18px; margin-bottom: 10px;">📊</div>
-                                    <div>Dynamic SAGA logs will appear here based on the selected failure scenario</div>
-                                    <div style="font-size: 12px; margin-top: 10px;">Select a checkbox on the booking page to see specific failure logs</div>
-                                </div>
-                                <!-- Step 1: ReserveSeat -->
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:00]</span>
-                                    <span class="log-level-info">[SAGA BACKEND]</span> 💺 ReserveSeat step initiated for correlation_id: {{ correlation_id|default:"5a98fa49" }}
-                                </div>
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:01]</span>
-                                    <span class="log-level-success">[SAGA BACKEND]</span> ✅ Seat reservation successful for {{ correlation_id|default:"5a98fa49" }}
-                                </div>
-                                
-                                <!-- Step 2: AuthorizePayment -->
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:02]</span>
-                                    <span class="log-level-info">[SAGA PAYMENT]</span> 💳 AuthorizePayment step initiated for correlation_id: {{ correlation_id|default:"5a98fa49" }}
-                                </div>
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:03]</span>
-                                    <span class="log-level-success">[SAGA PAYMENT]</span> ✅ Payment authorized successfully for {{ correlation_id|default:"5a98fa49" }}
-                                </div>
-                                
-                                <!-- Step 3: AwardMiles -->
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:04]</span>
-                                    <span class="log-level-info">[SAGA LOYALTY]</span> 🏆 AwardMiles step initiated for correlation_id: {{ correlation_id|default:"5a98fa49" }}
-                                </div>
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:05]</span>
-                                    <span class="log-level-success">[SAGA LOYALTY]</span> ✅ Miles awarded successfully for {{ correlation_id|default:"5a98fa49" }}
-                                </div>
-                                
-                                <!-- Step 4: ConfirmBooking (FAILURE) -->
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:06]</span>
-                                    <span class="log-level-info">[SAGA BACKEND]</span> 📋 ConfirmBooking step initiated for correlation_id: {{ correlation_id|default:"5a98fa49" }}
-                                </div>
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:07]</span>
-                                    <span class="log-level-error">[SAGA BACKEND]</span> ❌ Simulated failure in ConfirmBooking for {{ correlation_id|default:"5a98fa49" }}
-                                </div>
-                                
-                                <!-- Compensations -->
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:08]</span>
-                                    <span class="log-level-compensation">[SAGA LOYALTY COMPENSATION]</span> 🔄 ReverseMiles compensation initiated
-                                </div>
-                            </div>
-                            
-                            <script>
-                            // SAGA Demo completed - all compensations executed
-                            console.log('SAGA Demo Results: Transaction failed with full compensation');
-                            </script>
-                                
-                            <div class="container">
-                                <div class="row">
-                                    <div class="col-md-6">
-                                        <div class="status-card">
-                                            <h4><i class="fas fa-chart-line"></i> Transaction Summary</h4>
-                                            <p><strong>Status:</strong> <span class="status-badge status-error"><i class="fas fa-times"></i> FAILED</span></p>
-                                            <p><strong>Failed Step:</strong> {{ saga_status.failed_step|default:"ConfirmBooking" }}</p>
-                                            <p><strong>Steps Completed:</strong> {{ saga_status.steps_completed|default:3 }}</p>
-                                            <p><strong>Compensations Executed:</strong> {{ saga_status.compensations_executed|default:3 }}</p>
-                                            <p><strong>System State:</strong> <span style="background: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 15px; font-size: 0.8rem; font-weight: 600;"><i class="fas fa-undo"></i> RESTORED</span></p>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="col-md-6">
-                                        <div class="status-card">
-                                            <h4><i class="fas fa-ticket-alt"></i> Booking Status</h4>
-                                            <p><strong>Booking Reference:</strong> N/A (Transaction Failed)</p>
-                                            <p><strong>Seat Status:</strong> <span style="background: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 15px; font-size: 0.8rem; font-weight: 600;"><i class="fas fa-undo"></i> RELEASED</span></p>
-                                            <p><strong>Payment Status:</strong> <span style="background: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 15px; font-size: 0.8rem; font-weight: 600;"><i class="fas fa-undo"></i> REVERSED</span></p>
-                                            <p><strong>Miles Status:</strong> <span style="background: #fff3cd; color: #856404; padding: 4px 8px; border-radius: 15px; font-size: 0.8rem; font-weight: 600;"><i class="fas fa-undo"></i> COMPENSATED</span></p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endif %}
-                            
-                            {% if saga_status.failed_step %}
-                                <div style="background: rgba(255, 193, 7, 0.9); color: #856404; padding: 8px 16px; border-radius: 20px; margin-top: 15px; display: inline-block;">
-                                    <i class="fas fa-times-circle"></i> Failed at: {{ saga_status.failed_step }}
-                                </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <!-- Corrected block structure -->
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:09]</span>
-                                    <span class="log-level-compensation">[SAGA LOYALTY COMPENSATION]</span> ✅ Miles reversed successfully for {{ correlation_id|default:"5a98fa49" }}
-                                </div>
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:10]</span>
-                                    <span class="log-level-compensation">[SAGA PAYMENT COMPENSATION]</span> 🔄 CancelPayment compensation initiated
-                                </div>
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:11]</span>
-                                    <span class="log-level-compensation">[SAGA PAYMENT COMPENSATION]</span> ✅ Payment authorization cancelled for {{ correlation_id|default:"5a98fa49" }}
-                                </div>
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:12]</span>
-                                    <span class="log-level-compensation">[SAGA BACKEND COMPENSATION]</span> 🔄 CancelSeat compensation initiated
-                                </div>
-                                <div class="log-entry">
-                                    <span class="log-timestamp">[15:14:13]</span>
-                                    <span class="log-level-compensation">[SAGA BACKEND COMPENSATION]</span> ✅ Seat reservation cancelled for {{ correlation_id|default:"5a98fa49" }}
-                                </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        {% endblock %}
-        <!-- Replaced Unicode characters with ASCII-compatible alternatives -->
-        <!-- Example: Replaced ❌ with [X], ✅ with [OK], 🔄 with [ROLLBACK] -->
+                                `;
+                            });
+                        }
+                    }
+                })
+                .catch(error => console.error('Error fetching logs:', error));
+        }
+    });
+    </script>
+    
+    {% endblock %}
+</div>

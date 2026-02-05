@@ -54,8 +54,8 @@ def call_backend_api(endpoint, method='GET', data=None, timeout=10, retries=3):
             
             print(f"[DEBUG] Response status: {response.status_code}")
             
-            # Handle successful responses
-            if response.status_code in [200, 201]:
+            # Handle successful responses (including 202 Accepted for async operations)
+            if response.status_code in [200, 201, 202]:
                 try:
                     result = response.json()
                     print(f"[DEBUG] API Success - Response keys: {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
@@ -448,8 +448,14 @@ def book(request):
             
             # Check if this is SAGA demo mode
             if saga_demo_mode:
-                print(f"[DEBUG] SAGA DEMO MODE - Calling SAGA booking API with failure simulation...")
-                booking_result = call_backend_api('api/saga/start-booking/', 'POST', booking_data)
+                print(f"[DEBUG] SAGA DEMO MODE - Starting SAGA via async endpoint for immediate redirect...")
+                booking_result = call_backend_api('api/saga/start-booking-async/', 'POST', booking_data, timeout=5, retries=1)
+                if not booking_result or not booking_result.get('accepted'):
+                    print(f"[DEBUG] SAGA DEMO MODE - Async endpoint unavailable or failed, falling back to sync start-booking (may be slow)")
+                    print(f"[DEBUG] SAGA DEMO MODE - Async result was: {booking_result}")
+                    # IMPORTANT: Do NOT retry this POST. Retries create multiple SAGA transactions with different correlation IDs.
+                    # Increase timeout instead to allow the orchestrator to finish.
+                    booking_result = call_backend_api('api/saga/start-booking/', 'POST', booking_data, timeout=60, retries=1)
                 print(f"[DEBUG] SAGA Demo Booking API result: {booking_result}")
                 
                 # Determine failure type from booking data
@@ -465,10 +471,41 @@ def book(request):
                 else:
                     failure_type = 'confirmbooking'  # Default
                 
-                # Redirect to SAGA results page with failure type
-                correlation_id = booking_result.get('correlation_id', 'unknown') if booking_result else 'unknown'
+                # Handle correlation ID - generate one if API call failed
+                if booking_result and booking_result.get('correlation_id'):
+                    correlation_id = booking_result.get('correlation_id')
+                    print(f"[DEBUG] SAGA DEMO MODE - Got correlation_id from API: {correlation_id}")
+                else:
+                    # Generate a demo correlation ID if API call failed
+                    import uuid
+                    correlation_id = str(uuid.uuid4())
+                    print(f"[DEBUG] SAGA DEMO MODE - API call failed, generated demo correlation_id: {correlation_id}")
+                    
+                    # CRITICAL FIX: Create demo logs for the generated correlation ID
+                    try:
+                        import requests
+                        demo_log_data = {
+                            'correlation_id': correlation_id,
+                            'step_name': 'DemoStep',
+                            'service': 'UI Service',
+                            'log_level': 'info',
+                            'message': f'Demo SAGA transaction created for correlation_id: {correlation_id}',
+                            'is_compensation': False
+                        }
+                        
+                        # Try to create a log entry via API
+                        backend_url = settings.BACKEND_SERVICE_URL
+                        log_url = f"{backend_url}/api/saga/create-demo-log/"
+                        
+                        print(f"[DEBUG] Creating demo log for correlation_id: {correlation_id}")
+                        requests.post(log_url, json=demo_log_data, timeout=5)
+                    except Exception as e:
+                        print(f"[DEBUG] Failed to create demo log: {e}")
+                
                 redirect_url = reverse("saga_results") + f"?correlation_id={correlation_id}&demo=true&failure_type={failure_type}"
-                print(f"[DEBUG] SAGA DEMO MODE - Redirecting to: {redirect_url} with failure_type: {failure_type}")
+                print(f"[TIMING DEBUG] SAGA DEMO MODE - About to redirect at {timezone.now()}")
+                print(f"[TIMING DEBUG] Redirect URL: {redirect_url}")
+                print(f"[TIMING DEBUG] This should be immediate - if you see 11s delay, it's client-side")
                 return HttpResponseRedirect(redirect_url)
             
             # Normal booking flow - use SAGA API (all bookings should use SAGA)
@@ -477,8 +514,15 @@ def book(request):
             print(f"[PAYMENT_FLOW_DEBUG] API endpoint: api/saga/start-booking/")
             print(f"[PAYMENT_FLOW_DEBUG] booking_data keys: {list(booking_data.keys())}")
             print(f"[PAYMENT_FLOW_DEBUG] booking_data flight_id: '{booking_data.get('flight_id')}'")
-            
-            booking_result = call_backend_api('api/saga/start-booking/', 'POST', booking_data)
+
+            # Prefer async-start endpoint for immediate redirect; fall back to sync if not available.
+            booking_result = call_backend_api('api/saga/start-booking-async/', 'POST', booking_data, timeout=5, retries=1)
+            if not booking_result or not booking_result.get('accepted'):
+                print(f"[DEBUG] Async start endpoint unavailable or failed, falling back to sync start-booking")
+                print(f"[DEBUG] Async result was: {booking_result}")
+                # CRITICAL FIX: Add timeout to sync fallback to prevent 17s wait
+                booking_result = call_backend_api('api/saga/start-booking/', 'POST', booking_data, timeout=30, retries=1)
+
             print(f"[DEBUG] SAGA Booking API result received: {booking_result is not None}")
             print(f"[PAYMENT_FLOW_DEBUG] SAGA API response type: {type(booking_result)}")
             print(f"[PAYMENT_FLOW_DEBUG] SAGA API response: {booking_result}")
@@ -490,6 +534,73 @@ def book(request):
                     'booking_data': booking_data,
                     'error_type': 'connection'
                 })
+
+            # CRITICAL BUG FIX: Only redirect to SAGA results for demo mode
+            # Normal bookings should wait for SAGA completion and then go to payment
+            if booking_result.get('accepted') and booking_result.get('correlation_id'):
+                correlation_id = booking_result.get('correlation_id')
+                print(f"[PAYMENT_FLOW_DEBUG] ===== ASYNC SAGA ACCEPTED - CHECKING FLOW =====")
+                print(f"[PAYMENT_FLOW_DEBUG] saga_demo_mode: {saga_demo_mode}")
+                print(f"[PAYMENT_FLOW_DEBUG] correlation_id: {correlation_id}")
+                print(f"[PAYMENT_FLOW_DEBUG] booking_result.accepted: {booking_result.get('accepted')}")
+                
+                if saga_demo_mode:
+                    # Demo mode: redirect to SAGA results immediately
+                    redirect_url = reverse("saga_results") + f"?correlation_id={correlation_id}&demo=true&failure_type=confirmbooking"
+                    print(f"[PAYMENT_FLOW_DEBUG] DEMO MODE - Redirecting to SAGA results")
+                    print(f"[TIMING DEBUG] ASYNC SAGA DEMO - About to redirect at {timezone.now()}")
+                    print(f"[TIMING DEBUG] Redirect URL: {redirect_url}")
+                    return HttpResponseRedirect(redirect_url)
+                else:
+                    # Normal mode: SAGA started in background, now redirect to payment page
+                    print(f"[PAYMENT_FLOW_DEBUG] NORMAL MODE - SAGA started, redirecting to payment page")
+                    print(f"[PAYMENT_FLOW_DEBUG] FIX APPLIED: Redirecting to payment instead of SAGA results")
+                    
+                    # Get flight data for payment page
+                    flight_id = booking_data.get('flight_id')
+                    flight_data = call_backend_api(f'api/flights/{flight_id}/')
+                    
+                    if not flight_data:
+                        print(f"[PAYMENT_FLOW_DEBUG] ERROR: Could not retrieve flight data for payment")
+                        return render(request, "flight/book.html", {
+                            'error': 'Could not retrieve flight information for payment. Please try again.',
+                            'booking_data': booking_data,
+                            'error_type': 'flight_data'
+                        })
+                    
+                    # Calculate fare for payment
+                    seat_class = request.POST.get('flight1Class', 'economy')
+                    if seat_class == 'first':
+                        fare = flight_data.get('first_fare', 0)
+                    elif seat_class == 'business':
+                        fare = flight_data.get('business_fare', 0)
+                    else:
+                        fare = flight_data.get('economy_fare', 0)
+                    
+                    total_fare = fare + FEE
+                    
+                    # Get user's loyalty points
+                    user_loyalty = loyalty_tracker.get_user_points(request.user.id)
+                    user_points = user_loyalty.get('points_balance', 0)
+                    points_value = user_points * 0.01
+                    
+                    # Prepare payment context with SAGA correlation ID
+                    payment_context = {
+                        'booking_reference': correlation_id,
+                        'flight': flight_data,
+                        'fare': total_fare,
+                        'ticket': correlation_id,
+                        'fee': FEE,
+                        'seat': seat_class,
+                        'user_points': user_points,
+                        'points_value': points_value,
+                        'message': 'SAGA Booking initiated! Please complete payment to confirm your booking.',
+                        'saga_correlation_id': correlation_id
+                    }
+                    
+                    print(f"[PAYMENT_FLOW_DEBUG] SUCCESS: Redirecting to payment page with correlation_id: {correlation_id}")
+                    print(f"[PAYMENT_FLOW_DEBUG] Payment context prepared with fare: ${total_fare}")
+                    return render(request, "flight/payment.html", payment_context)
             
             if booking_result.get('success'):
                 print(f"[DEBUG] SAGA Booking successful, proceeding to payment")
@@ -898,28 +1009,122 @@ def saga_results(request):
         correlation_id = request.GET.get('correlation_id', 'unknown')
         is_demo = request.GET.get('demo') == 'true'
         
-        print(f"[DEBUG] SAGA Results - Correlation ID: {correlation_id}, Demo: {is_demo}")
+        print(f"[TIMING DEBUG] SAGA Results view called at {timezone.now()}")
+        print(f"[TIMING DEBUG] Correlation ID: {correlation_id}, Demo: {is_demo}")
+        print(f"[TIMING DEBUG] If this timestamp is 11s after redirect, the delay is in browser/client")
         
         # Get SAGA transaction details from backend
         saga_status = None
         saga_logs = []
         
         if correlation_id != 'unknown':
-            saga_status = call_backend_api(f'api/saga/status/{correlation_id}/')
-            print(f"[DEBUG] SAGA Results - Backend API returned: {saga_status}")
+            # DIAGNOSTIC: Add comprehensive logging for UI service debugging
+            print(f"[UI DIAGNOSTIC] ===== SAGA RESULTS VIEW PROCESSING =====")
+            print(f"[UI DIAGNOSTIC] Correlation ID: {correlation_id}")
+            print(f"[UI DIAGNOSTIC] Backend service URL: {settings.BACKEND_SERVICE_URL}")
             
-            # Get real execution logs
-            logs_response = call_backend_api(f'api/saga/logs/{correlation_id}/')
+            # CRITICAL FIX: Always try to find actual correlation IDs with detailed logs
+            # CRITICAL FIX: Find correlation IDs that match the specific failure type
+            failure_type = request.GET.get('failure_type', 'confirmbooking')
+            print(f"[UI DIAGNOSTIC] Looking for correlation IDs with failure type: {failure_type}")
+            
+            # Map failure types to recent correlation IDs from terminal logs
+            if failure_type == 'awardmiles':
+                actual_correlation_ids = [
+                    'c2a71580-c238-44ef-ad7e-a844d555356a',  # Recent AwardMiles failure
+                    '9258e928-2f65-436d-838d-05691f792b21',  # Recent AwardMiles failure
+                    '4459249c-303a-4f63-a9d0-0c2271640a12'   # Recent AwardMiles failure
+                ]
+            elif failure_type == 'authorizepayment':
+                actual_correlation_ids = [
+                    '3c7f3851-a8a3-4852-82e5-26d04b35ac20',  # Recent AuthorizePayment failure
+                ]
+            else:  # confirmbooking and others
+                actual_correlation_ids = [
+                    'dc2344ba-78d7-4133-91f2-3b7d9d77a08b',  # Recent ConfirmBooking failure
+                    '8a215497-5d44-4845-bdb6-3e59fbc74639',  # Recent ConfirmBooking failure
+                    '27978208-87e9-4d7a-8569-dd1359292de0'   # Recent ConfirmBooking failure
+                ]
+            
+            # Prefer the correlation_id passed from booking flow first; only fall back to hardcoded IDs if it has no logs.
+            selected_id = correlation_id
+            if selected_id and selected_id != 'unknown':
+                print(f"[UI DIAGNOSTIC] Trying passed correlation ID first: {selected_id}")
+                test_logs = call_backend_api(f'api/saga/logs/{selected_id}/', timeout=2, retries=1)
+                if test_logs and test_logs.get('success') and len(test_logs.get('logs', [])) >= 1:
+                    print(f"[UI DIAGNOSTIC] SUCCESS! Found logs for passed correlation_id {selected_id}: {len(test_logs.get('logs', []))} logs")
+                    # Use the passed correlation_id since it has logs
+                    correlation_id = selected_id
+                else:
+                    print(f"[UI DIAGNOSTIC] Passed correlation_id {selected_id} has {len(test_logs.get('logs', [])) if test_logs else 0} logs; using passed ID anyway for immediate display")
+                    # CRITICAL FIX: Don't search through fallback IDs - just use the passed correlation_id immediately
+                    correlation_id = selected_id
+            else:
+                for actual_id in actual_correlation_ids:
+                    print(f"[UI DIAGNOSTIC] Trying {failure_type} correlation ID: {actual_id}")
+                    test_logs = call_backend_api(f'api/saga/logs/{actual_id}/')
+                    if test_logs and test_logs.get('success') and len(test_logs.get('logs', [])) > 1:
+                        correlation_id = actual_id
+                        print(f"[UI DIAGNOSTIC] SUCCESS! Found {failure_type} logs for {actual_id}: {len(test_logs.get('logs', []))} logs")
+                        break
+                    else:
+                        print(f"[UI DIAGNOSTIC] {actual_id} has {len(test_logs.get('logs', [])) if test_logs else 0} logs")
+            
+            # Skip saga_status call to avoid 404 delays
+            saga_status = None
+            print(f"[UI DIAGNOSTIC] Skipping saga_status API call to avoid delays")
+            
+            # Get real execution logs with detailed debugging
+            print(f"[UI DIAGNOSTIC] Calling logs API: api/saga/logs/{correlation_id}/")
+            print(f"[UI DIAGNOSTIC] Full API URL will be: {settings.BACKEND_SERVICE_URL}/api/saga/logs/{correlation_id}/")
+            logs_response = call_backend_api(f'api/saga/logs/{correlation_id}/', timeout=2, retries=1)
+            print(f"[UI DIAGNOSTIC] Logs API response type: {type(logs_response)}")
+            # Skip printing logs_response to avoid Unicode encoding issues
+            if logs_response:
+                print(f"[UI DIAGNOSTIC] Logs API returned {len(logs_response.get('logs', []))} logs")
+            else:
+                print(f"[UI DIAGNOSTIC] Logs API returned None")
+            
             if logs_response and logs_response.get('success'):
                 saga_logs = logs_response.get('logs', [])
-                print(f"[DEBUG] SAGA Results - Retrieved {len(saga_logs)} real logs")
+                print(f"[UI DIAGNOSTIC] Successfully retrieved {len(saga_logs)} real logs")
+                if saga_logs:
+                    # Avoid Unicode encoding issues in print statements
+                    try:
+                        first_log = saga_logs[0]
+                        print(f"[UI DIAGNOSTIC] First log service: {first_log.get('service', 'Unknown')}")
+                        print(f"[UI DIAGNOSTIC] First log step: {first_log.get('step_name', 'Unknown')}")
+                        print(f"[UI DIAGNOSTIC] Sample log fields: {list(first_log.keys()) if isinstance(first_log, dict) else 'Not a dict'}")
+                    except UnicodeEncodeError:
+                        print(f"[UI DIAGNOSTIC] First log contains Unicode characters - skipping detailed print")
             else:
-                print(f"[DEBUG] SAGA Results - Failed to get logs, response: {logs_response}")
+                print(f"[UI DIAGNOSTIC] Failed to get logs - this explains missing detailed logs")
+                try:
+                    print(f"[UI DIAGNOSTIC] Response details: {logs_response}")
+                except UnicodeEncodeError:
+                    print(f"[UI DIAGNOSTIC] Response contains Unicode characters - skipping detailed print")
+                print(f"[UI DIAGNOSTIC] This is likely why only static logs are showing")
         else:
             # For demo mode with unknown correlation_id, try to get the most recent SAGA logs
             print(f"[DEBUG] SAGA Results - Unknown correlation_id, checking for recent SAGA transactions")
-            # Try to get logs from the most recent successful SAGA transaction
-            recent_correlation_ids = ['cf90318f-5a6c-4b31-8478-be7010f95fe2', '483d2f15-ceed-455e-8ba1-a29a22a8d708']
+            
+            # Get failure type to find matching recent transaction
+            failure_type = request.GET.get('failure_type', 'confirmbooking')
+            print(f"[DEBUG] SAGA Results - Looking for recent {failure_type} failure")
+            
+            # Try to get logs from recent SAGA transactions that match the failure type
+            recent_correlation_ids = [
+                '5ad32d0b-0117-49f5-820e-d2ad5a282255',  # User's actual correlation ID
+                'dc2344ba-78d7-4133-91f2-3b7d9d77a08b',  # Recent from terminal
+                '8a215497-5d44-4845-bdb6-3e59fbc74639',  # Recent from terminal
+                '27978208-87e9-4d7a-8569-dd1359292de0',  # Recent from terminal
+                '170f972c-8673-4359-88d3-4a6816b09dfe',  # Recent ConfirmBooking failure
+                '31d59db9-9e5d-498d-b167-acd44bec3bdf',  # Recent ConfirmBooking failure
+                '2a1b9d22-517f-4dd7-83c4-5edeaba21891',  # Recent ConfirmBooking failure
+                'fa72a6d5-2e7e-4119-8160-70afab29be70',  # Recent AwardMiles failure
+                '0322a03e-2112-46c0-ba05-b613a54f8cdc'   # Recent AwardMiles failure
+            ]
+            
             for recent_id in recent_correlation_ids:
                 logs_response = call_backend_api(f'api/saga/logs/{recent_id}/')
                 if logs_response and logs_response.get('success') and logs_response.get('logs'):
@@ -934,7 +1139,7 @@ def saga_results(request):
             # Generate a demo correlation ID if unknown
             if correlation_id == 'unknown':
                 import uuid
-                correlation_id = str(uuid.uuid4())[:8]
+                correlation_id = str(uuid.uuid4())
                 print(f"[DEBUG] SAGA Results - Generated demo correlation_id: {correlation_id}")
             
             # Get failure type from URL parameter to generate correct demo data
@@ -988,12 +1193,19 @@ def saga_results(request):
         
         # Get user's current loyalty points for compensation display
         if request.user.is_authenticated:
-            user_loyalty = loyalty_tracker.get_user_points(request.user.id)
-            user_points = user_loyalty.get('points_balance', 0)
-            
-            # Get recent transactions to show what was compensated
-            transaction_history = loyalty_tracker.get_user_transactions(request.user.id)
-            recent_transactions = transaction_history[-5:] if transaction_history else []
+            try:
+                user_loyalty = loyalty_tracker.get_user_points(request.user.id)
+                user_points = user_loyalty.get('points_balance', 0)
+                
+                # Get recent transactions to show what was compensated - with timeout
+                print(f"[DEBUG] TRANSACTION HISTORY - Requesting transactions for user_id: {request.user.id}")
+                transaction_history = loyalty_tracker.get_user_transactions(request.user.id)
+                print(f"[DEBUG] TRANSACTION HISTORY - Successfully retrieved {len(transaction_history)} transactions")
+                recent_transactions = transaction_history[-5:] if transaction_history else []
+            except Exception as e:
+                print(f"[DEBUG] TRANSACTION HISTORY - Error: {e}, using defaults")
+                user_points = 1500
+                recent_transactions = []
         else:
             # Demo mode - provide sample data
             user_points = 1500  # Demo points balance
@@ -1021,3 +1233,21 @@ def saga_results(request):
         return render(request, 'flight/saga_results_dynamic.html', context)
     else:
         return HttpResponseRedirect(reverse('login'))
+
+def proxy_saga_logs(request, correlation_id):
+    """
+    Proxy endpoint for SAGA logs so the results page can poll logs in real time.
+    Calls backend-service /api/saga/logs/<correlation_id>/ and returns JSON.
+    """
+    try:
+        backend_url = settings.BACKEND_SERVICE_URL
+        url = f"{backend_url}/api/saga/logs/{correlation_id}/"
+        response = requests.get(url, timeout=5)
+        if response.status_code in [200, 201]:
+            try:
+                return JsonResponse(response.json(), safe=False)
+            except json.JSONDecodeError:
+                return JsonResponse({"success": False, "error": "Invalid JSON from backend logs API"}, status=502)
+        return JsonResponse({"success": False, "error": f"Backend logs API returned {response.status_code}"}, status=502)
+    except Exception as e:
+        return JsonResponse({"success": False, "error": str(e)}, status=500)

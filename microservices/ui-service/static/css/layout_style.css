@@ -70,13 +70,74 @@ body{
     background-position: center;
     background-repeat: no-repeat;
     padding: 30px 50px;
-    min-height: 100vh;
 }
-.first-section{
+
+/* Only the split-hero should be full viewport height */
+.section.first-section.split-hero{
+    height: 100vh;
+    min-height: 100vh;
+    padding: 0;
+    background: none;
+}
+
+/* Popular Destinations should size to content */
+.section.second-section{
+    min-height: auto;
+    height: auto;
+    padding: 50px;
+}
+
+/* Split layout container */
+.layout-container {
     display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+}
+
+.top-half {
+    flex: 1.2;              /* ~20% more space for flight.jpg */
+    min-height: 60vh;       /* keep visible height increase */
     background-size: cover;
     background-position: center center;
     background-repeat: no-repeat;
+}
+
+.bottom-half {
+    flex: 0.8;              /* ~20% less space for white search area */
+    min-height: 40vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f5f5f5;
+}
+
+.layout-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+}
+
+.top-half {
+    flex: 1.2;              /* ~20% more space for flight.jpg */
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+}
+
+.bottom-half {
+    flex: 0.8;              /* ~20% less space for white search area */
+    min-height: 40vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f5f5f5;
+    padding: 0;
 }
 
 .banner-div{
@@ -175,13 +236,23 @@ body{
     }
 }
 
-.search-flight{
-    padding: 50px 40px;
+/* Trip Search Container - White Container in Second Half */
+.trip-search-container {
+    width: 100%;
+    height: 100%;
     background-color: #fff;
-    width: 40%;
-    border-radius: 7px;
-    box-shadow: rgba(101, 119, 134, 0.2) 0px 0px 15px, rgba(101, 119, 134, 0.15) 0px 0px 3px 1px;
+    padding: 30px 40px;
     display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Search Flight Section */
+.search-flight{
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 .search-flight .input-row{
     margin: 10px;
@@ -197,6 +268,137 @@ body{
 .search-flight .dropdown-menu{
     top: auto;
     left: auto;
+}
+
+/* Form Layout Styles */
+.search-flight-form {
+    width: 100%;
+}
+
+.align-items-center {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.trip-type-row {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    margin-bottom: 10px;
+}
+
+.horizontal-form-row {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 10px;
+    align-items: end;
+    justify-content: space-between;
+}
+
+.form-field {
+    position: relative; /* anchor autocomplete dropdown to this field */
+    display: flex;
+    flex-direction: column;
+    min-width: 100px;
+    flex: 1;
+    max-width: 150px;
+}
+
+.form-field label {
+    margin-bottom: 5px;
+    font-size: 0.9em;
+    color: rgb(100,100,100);
+    font-weight: 500;
+}
+
+.form-field input,
+.form-field select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.form-field button {
+    padding: 10px 20px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.form-field button:hover {
+    background-color: #0056b3;
+}
+
+/* Responsive Design Updates */
+@media (max-width: 992px){
+    .trip-search-container{
+        width: 80%!important;
+        margin-left: auto;
+        margin-right: auto;
+    }
+}
+
+@media (max-width: 768px){
+    .trip-search-container{
+        width: 85%!important;
+        height: 70vh;
+    }
+    .horizontal-form-row {
+        flex-direction: column;
+        gap: 10px;
+    }
+    .form-field {
+        min-width: 100%;
+    }
+    .search-flight{
+        padding: 20px 30px !important;
+    }
+}
+
+@media (max-width: 652px){
+    .trip-search-container{
+        width: 99%!important;
+    }
+}
+
+@media (max-width: 576px){
+    .trip-search-container{
+        width: 100%!important;
+        height: 70vh;
+    }
+    .search-flight{
+        padding: 20px 30px !important;
+    }
+}
+
+@media (max-width: 430px){
+    .search-flight{
+        padding: 15px 18px !important;
+    }
+}
+
+@media (max-width: 376px){
+    .trip-search-container{
+        height: 60vh;
+    }
+    .search-flight{
+        padding: 15px 10px !important;
+    }
+}
+
+@media (max-width: 280px){
+    .trip-search-container{
+        height: 50vh;
+    }
+    .search-flight{
+        padding: 10px 5px !important;
+    }
 }
 
 
@@ -339,19 +541,20 @@ footer .container > div{
     width: 44px;
 }
 
+/* Autocomplete dropdown: position below the active input, not overlapping */
 #places_from, #places_to{
     display: none;
     position: absolute;
     left: 0;
     right: 0;
-    margin-left: 10px;
-    margin-right: 10px;
+    top: 100%;
+    margin-top: 6px;
     background-color: #fff;
-    box-shadow: 0 0 5px rgba(0,0,0,.2);
-    cursor: pointer;
-    max-height: 70%;
+    box-shadow: 0 6px 16px rgba(0,0,0,.15);
+    max-height: 220px;
     overflow: auto;
     cursor: pointer;
+    z-index: 9999;
 }
 .each_places_from_list, .each_places_to_list{
     padding: 10px 15px;
@@ -367,6 +570,7 @@ footer .container > div{
     display: none;
     cursor: pointer;
 }
+/* Ensure autocomplete dropdown is anchored to the form container */
 .search-flight-form-data{
     position: relative;
 }

@@ -1,0 +1,45 @@
+- id: remove_miles_ui_display
+  phase: ui_cleanup
+  goal: "Remove miles conversion rate and maximum miles display from transaction page UI"
+  mode: code
+  status: pending
+  outputs:
+    files:
+      - apps/loyalty/templates/loyalty/transaction_page.html
+      - apps/loyalty/templates/loyalty/checkout.html
+      - apps/loyalty/templates/loyalty/payment_form.html
+      - apps/loyalty/static/loyalty/js/transaction.js
+      - apps/loyalty/static/loyalty/css/transaction.css
+      - apps/loyalty/views.py
+      - apps/loyalty/context_processors.py
+  features:
+    - "Remove '1 mile = $0.01' conversion rate display from transaction UI"
+    - "Remove 'Maximum 2240 miles available' text from transaction forms"
+    - "Clean up related CSS styling for miles display elements"
+    - "Update JavaScript to remove miles calculation logic"
+    - "Maintain existing loyalty points functionality"
+  integration:
+    - "Preserve existing loyalty points redemption flow"
+    - "Keep backend loyalty calculations intact"
+    - "Ensure transaction page remains functional"
+  steps:
+    - name: identify_ui_elements
+      mode: architect
+      description: "Locate all UI elements displaying miles conversion and maximum miles text"
+      status: pending
+    - name: remove_template_elements
+      mode: code
+      description: "Remove miles display elements from HTML templates"
+      status: pending
+    - name: cleanup_styles_scripts
+      mode: code
+      description: "Remove related CSS and JavaScript for miles display"
+      status: pending
+    - name: update_context_data
+      mode: code
+      description: "Remove miles-related context data from views"
+      status: pending
+    - name: test_ui_changes
+      mode: debug
+      description: "Verify transaction page functionality after UI cleanup"
+      status: pending

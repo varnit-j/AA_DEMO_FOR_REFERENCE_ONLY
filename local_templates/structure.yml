@@ -1,0 +1,236 @@
+
+# local_templates/structure.yml
+version: 1
+project: "Flight-booking"
+description: >
+  Transaction-based system with Rewards (earn/burn), Cash Payments (Stripe),
+  and Hybrid Checkout (points + cash) + a Shiny for Python UI micro-app.
+  Designed for Django + SQLite (no Docker/Redis/Postgres). Includes settlement,
+  receipts, and tests. Shiny UI can run via PyShiny or be exported with Shinylive
+  for static embedding.
+
+phases:
+  - slug: env
+    name: Environment & Project Scripts
+    directories:
+      - path: scripts
+      - path: .roo
+    files:
+      - path: .env.example
+        template: env/env.example
+        purpose: Environment variables (Stripe keys, email)
+      - path: scripts/dev_run.sh
+        template: scripts/dev_run.sh
+        purpose: Runserver & Stripe webhook tunnel (Stripe CLI)
+    environment:
+      required:
+        - DJANGO_SECRET_KEY
+        - DJANGO_DEBUG
+        - DJANGO_ALLOWED_HOSTS
+        - STRIPE_PUBLISHABLE_KEY
+        - STRIPE_SECRET_KEY
+        - STRIPE_WEBHOOK_SECRET
+        - EMAIL_HOST
+        - EMAIL_PORT
+        - EMAIL_HOST_USER
+        - EMAIL_HOST_PASSWORD
+        - EMAIL_USE_TLS
+
+  - slug: loyalty
+    name: Rewards Ledger & Rules
+    status: implemented
+    directories:
+      - path: apps/loyalty
+      - path: apps/loyalty/templates/loyalty
+      - path: apps/loyalty/management/commands
+    files:
+      - path: apps/loyalty/models.py
+        template: loyalty/models.py
+        status: implemented
+        features:
+          - "LoyaltyTier model with Bronze/Silver/Gold/Platinum tiers"
+          - "LoyaltyAccount model with points balance and tier tracking"
+          - "PointsTransaction model for earn/redeem/expire transactions"
+      - path: apps/loyalty/service.py
+        template: loyalty/service.py
+        status: implemented
+        features:
+          - "Points earning: 2% of booking amount"
+          - "Points redemption with balance validation"
+          - "Automatic tier upgrades based on points earned"
+          - "Transaction history and balance management"
+      - path: apps/loyalty/admin.py
+        template: loyalty/admin.py
+        status: implemented
+      - path: apps/loyalty/views.py
+        status: implemented
+        features:
+          - "Dashboard view with points balance and tier info"
+          - "Points history view with transaction details"
+          - "Tier information view"
+      - path: apps/loyalty/urls.py
+        status: implemented
+      - path: apps/loyalty/templates/loyalty/dashboard.html
+        status: implemented
+      - path: apps/loyalty/templates/loyalty/points_history.html
+        status: implemented
+      - path: apps/loyalty/templates/loyalty/tier_info.html
+        status: implemented
+      - path: apps/loyalty/management/commands/setup_loyalty_data.py
+        status: implemented
+        purpose: "Initialize loyalty tiers and test data"
+      - path: tests/test_loyalty.py
+        template: tests/test_loyalty.py
+    integration:
+      - "Integrated with flight booking payment flow in flight/views.py"
+      - "Points awarded automatically on successful payment (2% of fare)"
+      - "Points redemption available during checkout."
+      - "Unicode-safe calculations and display"
+
+  - slug: orders
+    name: Orders, Lines & Settlement
+    directories:
+      - path: apps/orders
+    files:
+      - path: apps/orders/models.py
+        template: orders/models.py
+      - path: apps/orders/service.py
+        template: orders/service.py
+      - path: tests/test_orders.py
+        template: tests/test_orders.py
+
+  - slug: payments
+    name: Cash Payments (Stripe)
+    directories:
+      - path: apps/payments
+      - path: payments
+    files:
+      - path: apps/payments/stripe_client.py
+        template: payments/stripe_client.py
+      - path: payments/views.py
+        template: payments/views.py
+      - path: payments/webhooks.py
+        template: payments/webhooks.py
+      - path: tests/test_payments.py
+        template: tests/test_payments.py
+    notes:
+      - "Use PaymentIntents/Elements or Stripe Checkout; staged cash via invoice partial payments."  # Stripe docs support these advanced scenarios [4](https://www.educative.io/projects/build-python-airline-reservation-system)[5](https://github.com/UCY-LINC-LAB/icarus-ontology)
+
+  - slug: hybrid
+    name: Hybrid Checkout (Points + Cash)
+    directories:
+      - path: flight/views
+      - path: flight/templates/flight
+    files:
+      - path: flight/views/hybrid_checkout.py
+        template: views/hybrid_checkout.py
+      - path: flight/templates/flight/hybrid_checkout.html
+        template: templates/hybrid_checkout.html
+      - path: tests/test_hybrid.py
+        template: tests/test_hybrid.py
+
+  - slug: receipts
+    name: Settlement, Boarding Pass, & Emails
+    directories:
+      - path: apps/receipts
+    files:
+      - path: apps/receipts/boarding_pass.py
+        template: receipts/boarding_pass.py
+      - path: apps/receipts/emails.py
+        template: receipts/emails.py
+      - path: tests/test_receipts.py
+        template: tests/test_receipts.py
+
+  - slug: scheduler
+    name: Points Expiry & Reminder Jobs (No Celery)
+    directories:
+      - path: flight/management/commands
+    files:
+      - path: flight/management/commands/expire_points.py
+        template: mgmt/expire_points.py
+      - path: flight/management/commands/send_payment_reminders.py
+        template: mgmt/send_payment_reminders.py
+      - path: tests/test_scheduler.py
+        template: tests/test_scheduler.py
+
+  - slug: ui_shiny
+    name: Shiny for Python UI (Hybrid Dashboard)
+    directories:
+      - path: ui/shiny
+      - path: ui/shiny/www
+      - path: ui/shiny/tests
+    files:
+      - path: ui/shiny/app.py
+        template: shiny/app.py
+        purpose: Shiny app (inputs: points to redeem, seat class, etc.; outputs: totals, plots)
+      - path: ui/shiny/www/custom.css
+        template: shiny/custom.css
+        purpose: Styles for the Shiny UI
+      - path: ui/shiny/tests/test_app.py
+        template: shiny/test_app.py
+        purpose: Basic Shiny UI tests
+      - path: flight/templates/flight/hybrid_shiny.html
+        template: templates/hybrid_shiny.html
+        purpose: Django page that embeds Shiny UI via iframe or Shinylive export
+    notes:
+      - "PyShiny: pip install shiny; run with `shiny run ui/shiny/app.py --reload`."  # official PyShiny getting-started [1](https://shiny.posit.co/py/)[6](https://github.com/posit-dev/py-shiny/blob/main/README.md)
+      - "Shinylive: `shinylive export ui/shiny site/` to produce a static app and embed it."  # Shinylive export & static hosting [2](https://rstudio.github.io/cheatsheets/html/shiny-python.html)
+
+  - slug: perf
+    name: Local Performance & Observability (No Redis)
+    files:
+      - path: capstone/settings_cache.py
+        template: settings/cache_locmem.py
+      - path: capstone/settings_logging.py
+        template: settings/logging.py
+      - path: requirements.txt
+        append:
+          - stripe
+          - reportlab
+          - qrcode
+          - python-barcode
+          - django-ratelimit
+          - shiny
+        purpose: Dependencies for integrated features
+
+  - slug: unicode_fixes
+    name: Unicode Encoding Fixes
+    status: implemented
+    files:
+      - path: fix_unicode_environment.py
+        status: implemented
+        purpose: "Environment setup script for Unicode handling on Windows"
+      - path: start_server_unicode_safe.bat
+        status: implemented
+        purpose: "Unicode-safe Django server startup script"
+      - path: test_unicode_fix.py
+        status: implemented
+        purpose: "Test script to verify Unicode handling"
+      - path: UNICODE_FIX_README.md
+        status: implemented
+        purpose: "Documentation of Unicode fixes applied"
+      - path: flight/views.py
+        modifications:
+          - "Added safe_print() function for Unicode-safe console output"
+          - "Enhanced payment view with Unicode error handling"
+          - "Fixed loyalty points integration with proper Unicode support"
+    features:
+      - "Windows console UTF-8 encoding support"
+      - "Unicode-safe print functions in Django views"
+      - "Proper environment variable configuration for Unicode"
+      - "Fixed 'charmap' codec encoding errors"
+      - "Safe handling of Unicode characters in payment processing"
+    integration:
+      - "Integrated with Django settings for UTF-8 support"
+      - "Applied to loyalty points calculation and display"
+      - "Enhanced payment processing with Unicode safety"
+
+guards:
+  - check: "python manage.py makemigrations --check --dry-run"
+    on_phase: [loyalty, orders, payments, hybrid, receipts, scheduler]
+  - check: "pytest -q"
+    on_phase: [loyalty, orders, payments, hybrid, receipts, scheduler, perf, ui_shiny]
+
+notes:
+  - "Embedding option A: iframe to a running PyShiny app. Option B: embed Shinylive-exported static app into Django template."
+  - "Shiny apps can be hosted on shinyapps.io/Posit Connect or exported as static Shinylive apps for easy embedding."  # hosting & embed guidance [2](https://rstudio.github.io/cheatsheets/html/shiny-python.html)

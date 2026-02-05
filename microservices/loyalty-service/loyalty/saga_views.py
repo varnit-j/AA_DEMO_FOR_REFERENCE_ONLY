@@ -25,6 +25,15 @@ def award_miles(request):
         booking_data = data.get('booking_data', {})
         simulate_failure = data.get('simulate_failure', False)
 
+        # DIAGNOSTIC: detect duplicate/retried calls
+        remote_addr = request.META.get('REMOTE_ADDR')
+        forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        logger.info(f"[LOYALTY IDEMPOTENCY DEBUG] AwardMiles called correlation_id={correlation_id} remote={remote_addr} xff={forwarded_for}")
+        if correlation_id:
+            existing_awards = SagaMilesAward.objects.filter(correlation_id=correlation_id).count()
+            existing_txn = LoyaltyTransaction.objects.filter(transaction_id=f"SAGA-{correlation_id[:8]}").count()
+            logger.info(f"[LOYALTY IDEMPOTENCY DEBUG] AwardMiles precheck correlation_id={correlation_id} SagaMilesAward.count={existing_awards} LoyaltyTransaction(SAGA-*).count={existing_txn}")
+
         logger.info(f"[SAGA LOYALTY] 📝 Logging detailed transaction for loyalty point history.")
         
         logger.info(f"[SAGA LOYALTY] 🎯 AwardMiles step initiated for correlation_id: {correlation_id}")
@@ -32,8 +41,9 @@ def award_miles(request):
         
         # Simulate failure if requested
         if simulate_failure:
-            logger.error(f"[SAGA LOYALTY] ❌ Simulated failure in AwardMiles for {correlation_id}")
+            logger.error(f"[SAGA LOYALTY] ❌ SIMULATED FAILURE in AwardMiles for {correlation_id}")
             logger.error(f"[SAGA LOYALTY] 🔄 This will trigger compensation for previous steps (seat reservation & payment)")
+            logger.error(f"[SAGA LOYALTY] 🚨 NO MILES WERE AWARDED - Step 3 is FAILING as intended")
             return JsonResponse({
                 "success": False,
                 "error": "Simulated miles award failure - loyalty service temporarily unavailable"
@@ -88,6 +98,7 @@ def award_miles(request):
             status='AWARDED'
         )
         logger.info(f"[SAGA LOYALTY] 💾 Created SAGA award record: {saga_award.id}")
+        logger.info(f"[DIAGNOSTIC] SAGA award created - correlation_id: {correlation_id}, status: {saga_award.status}")
         
         # Create transaction record
         transaction = LoyaltyTransaction.objects.create(
@@ -130,6 +141,16 @@ def reverse_miles(request):
         correlation_id = data.get('correlation_id')
         compensation_reason = data.get('compensation_reason', 'SAGA compensation')
 
+        # DIAGNOSTIC: detect duplicate/retried calls
+        remote_addr = request.META.get('REMOTE_ADDR')
+        forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        logger.info(f"[LOYALTY IDEMPOTENCY DEBUG] ReverseMiles called correlation_id={correlation_id} remote={remote_addr} xff={forwarded_for}")
+        if correlation_id:
+            existing_awards = SagaMilesAward.objects.filter(correlation_id=correlation_id).count()
+            existing_reversed_awards = SagaMilesAward.objects.filter(correlation_id=correlation_id, status='REVERSED').count()
+            existing_comp_txn = LoyaltyTransaction.objects.filter(transaction_id=f"COMP-{correlation_id[:8]}").count()
+            logger.info(f"[LOYALTY IDEMPOTENCY DEBUG] ReverseMiles precheck correlation_id={correlation_id} SagaMilesAward.count={existing_awards} SagaMilesAward(REVERSED).count={existing_reversed_awards} LoyaltyTransaction(COMP-*).count={existing_comp_txn}")
+
         # DIAGNOSTIC: Enhanced logging for compensation debugging
         logger.info(f"[COMPENSATION_DEBUG] ===== LOYALTY COMPENSATION RECEIVED =====")
         logger.info(f"[COMPENSATION_DEBUG] Request method: {request.method}")
@@ -148,6 +169,12 @@ def reverse_miles(request):
         
         # Find the original SAGA award
         try:
+            # DIAGNOSTIC: Check all SAGA awards for this correlation_id
+            all_awards = SagaMilesAward.objects.filter(correlation_id=correlation_id)
+            logger.info(f"[DIAGNOSTIC] Found {all_awards.count()} SAGA awards for correlation_id {correlation_id}")
+            for award in all_awards:
+                logger.info(f"[DIAGNOSTIC] Award ID {award.id}: status={award.status}, miles={award.miles_awarded}")
+            
             saga_award = SagaMilesAward.objects.get(correlation_id=correlation_id, status='AWARDED')
             logger.info(f"[SAGA COMPENSATION] 🎯 Found SAGA award record: {saga_award.id}")
         except SagaMilesAward.DoesNotExist:
